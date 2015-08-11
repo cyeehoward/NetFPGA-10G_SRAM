@@ -1,0 +1,753 @@
+Release 13.4 - xst O.87xd (lin64)
+Copyright (c) 1995-2011 Xilinx, Inc.  All rights reserved.
+--> 
+
+TABLE OF CONTENTS
+  1) Synthesis Options Summary
+  2) HDL Compilation
+  3) Design Hierarchy Analysis
+  4) HDL Analysis
+  5) HDL Synthesis
+     5.1) HDL Synthesis Report
+  6) Advanced HDL Synthesis
+     6.1) Advanced HDL Synthesis Report
+  7) Low Level Synthesis
+  8) Partition Report
+  9) Final Report
+	9.1) Device utilization summary
+	9.2) Partition Resource Summary
+	9.3) TIMING REPORT
+
+
+=========================================================================
+*                      Synthesis Options Summary                        *
+=========================================================================
+---- Source Parameters
+Input Format                       : MIXED
+Input File Name                    : "nf10_identifier_0_wrapper_xst.prj"
+Verilog Include Directory          : {"/root/NetFPGA-10G-live/projects/reference_nic/hw/pcores/" "/root/NetFPGA-10G-live/lib/hw/contrib/pcores/" "/root/NetFPGA-10G-live/lib/hw/std/pcores/" "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/" "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxBFMinterface/pcores/" "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/" }
+
+---- Target Parameters
+Target Device                      : xc5vtx240tff1759-2
+Output File Name                   : "../implementation/nf10_identifier_0_wrapper.ngc"
+
+---- Source Options
+Top Module Name                    : nf10_identifier_0_wrapper
+
+---- Target Options
+Add IO Buffers                     : NO
+
+---- General Options
+Optimization Goal                  : speed
+Netlist Hierarchy                  : as_optimized
+Optimization Effort                : 1
+Hierarchy Separator                : /
+
+---- Other Options
+Cores Search Directories           : {../implementation}
+
+=========================================================================
+
+
+=========================================================================
+*                          HDL Compilation                              *
+=========================================================================
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/family_support.vhd" in Library proc_common_v3_00_a.
+Package <family_support> compiled.
+Package body <family_support> compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/proc_common_pkg.vhd" in Library proc_common_v3_00_a.
+Package <proc_common_pkg> compiled.
+Package body <proc_common_pkg> compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/inferred_lut4.vhd" in Library proc_common_v3_00_a.
+Entity <inferred_lut4> compiled.
+Entity <inferred_lut4> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/muxf_struct_f.vhd" in Library proc_common_v3_00_a.
+Entity <muxf_struct> compiled.
+Entity <muxf_struct> (Architecture <imp>) compiled.
+Entity <muxf_struct_f> compiled.
+Entity <muxf_struct_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_counter_bit.vhd" in Library proc_common_v3_00_a.
+Entity <pf_counter_bit> compiled.
+Entity <pf_counter_bit> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/cntr_incr_decr_addn_f.vhd" in Library proc_common_v3_00_a.
+Entity <cntr_incr_decr_addn_f> compiled.
+Entity <cntr_incr_decr_addn_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/dynshreg_f.vhd" in Library proc_common_v3_00_a.
+Entity <dynshreg_f> compiled.
+Entity <dynshreg_f> (Architecture <behavioral>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_adder_bit.vhd" in Library proc_common_v3_00_a.
+Entity <pf_adder_bit> compiled.
+Entity <pf_adder_bit> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_counter.vhd" in Library proc_common_v3_00_a.
+Entity <pf_counter> compiled.
+Entity <pf_counter> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_occ_counter.vhd" in Library proc_common_v3_00_a.
+Entity <pf_occ_counter> compiled.
+Entity <pf_occ_counter> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/counter_bit.vhd" in Library proc_common_v3_00_a.
+Entity <counter_bit> compiled.
+Entity <counter_bit> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/or_muxcy_f.vhd" in Library proc_common_v3_00_a.
+Entity <or_muxcy_f> compiled.
+Entity <or_muxcy_f> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/srl_fifo_rbu_f.vhd" in Library proc_common_v3_00_a.
+Entity <srl_fifo_rbu_f> compiled.
+Entity <srl_fifo_rbu_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/family.vhd" in Library proc_common_v3_00_a.
+Package <family> compiled.
+Package body <family> compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_occ_counter_top.vhd" in Library proc_common_v3_00_a.
+Entity <pf_occ_counter_top> compiled.
+Entity <pf_occ_counter_top> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_counter_top.vhd" in Library proc_common_v3_00_a.
+Entity <pf_counter_top> compiled.
+Entity <pf_counter_top> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_adder.vhd" in Library proc_common_v3_00_a.
+Entity <pf_adder> compiled.
+Entity <pf_adder> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/or_muxcy.vhd" in Library proc_common_v3_00_a.
+Entity <or_muxcy> compiled.
+Entity <or_muxcy> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/counter.vhd" in Library proc_common_v3_00_a.
+Entity <Counter> compiled.
+Entity <Counter> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/coregen_comp_defs.vhd" in Library proc_common_v3_00_a.
+Package <coregen_comp_defs> compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/common_types_pkg.vhd" in Library proc_common_v3_00_a.
+Package <Common_Types> compiled.
+Package body <Common_Types> compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/conv_funs_pkg.vhd" in Library proc_common_v3_00_a.
+Package <conv_funs_pkg> compiled.
+Package body <conv_funs_pkg> compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/async_fifo_fg.vhd" in Library proc_common_v3_00_a.
+Entity <async_fifo_fg> compiled.
+Entity <async_fifo_fg> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/sync_fifo_fg.vhd" in Library proc_common_v3_00_a.
+Entity <sync_fifo_fg> compiled.
+Entity <sync_fifo_fg> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/basic_sfifo_fg.vhd" in Library proc_common_v3_00_a.
+Entity <basic_sfifo_fg> compiled.
+Entity <basic_sfifo_fg> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/blk_mem_gen_wrapper.vhd" in Library proc_common_v3_00_a.
+Entity <blk_mem_gen_wrapper> compiled.
+Entity <blk_mem_gen_wrapper> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/addsub.vhd" in Library proc_common_v3_00_a.
+Entity <addsub> compiled.
+Entity <addsub> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/direct_path_cntr.vhd" in Library proc_common_v3_00_a.
+Entity <direct_path_cntr> compiled.
+Entity <direct_path_cntr> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/direct_path_cntr_ai.vhd" in Library proc_common_v3_00_a.
+Entity <direct_path_cntr_ai> compiled.
+Entity <direct_path_cntr_ai> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/down_counter.vhd" in Library proc_common_v3_00_a.
+Entity <down_counter> compiled.
+Entity <down_counter> (Architecture <simulation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/eval_timer.vhd" in Library proc_common_v3_00_a.
+Entity <eval_timer> compiled.
+Entity <eval_timer> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/ipif_steer.vhd" in Library proc_common_v3_00_a.
+Entity <IPIF_Steer> compiled.
+Entity <IPIF_Steer> (Architecture <IMP>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/ipif_steer128.vhd" in Library proc_common_v3_00_a.
+Entity <ipif_steer128> compiled.
+Entity <ipif_steer128> (Architecture <IMP>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/ipif_mirror128.vhd" in Library proc_common_v3_00_a.
+Entity <ipif_mirror128> compiled.
+Entity <ipif_mirror128> (Architecture <IMP>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/ld_arith_reg.vhd" in Library proc_common_v3_00_a.
+Entity <ld_arith_reg> compiled.
+Entity <ld_arith_reg> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/ld_arith_reg2.vhd" in Library proc_common_v3_00_a.
+Entity <ld_arith_reg2> compiled.
+Entity <ld_arith_reg2> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/mux_onehot.vhd" in Library proc_common_v3_00_a.
+Entity <mux_onehot> compiled.
+Entity <mux_onehot> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/or_bits.vhd" in Library proc_common_v3_00_a.
+Entity <or_bits> compiled.
+Entity <or_bits> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/or_gate.vhd" in Library proc_common_v3_00_a.
+Entity <or_gate> compiled.
+Entity <or_gate> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/or_gate128.vhd" in Library proc_common_v3_00_a.
+Entity <or_gate128> compiled.
+Entity <or_gate128> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pf_dpram_select.vhd" in Library proc_common_v3_00_a.
+Entity <pf_dpram_select> compiled.
+Entity <pf_dpram_select> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pselect.vhd" in Library proc_common_v3_00_a.
+Entity <pselect> compiled.
+Entity <pselect> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pselect_mask.vhd" in Library proc_common_v3_00_a.
+Entity <pselect_mask> compiled.
+Entity <pselect_mask> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/srl16_fifo.vhd" in Library proc_common_v3_00_a.
+Entity <srl16_fifo> compiled.
+Entity <srl16_fifo> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/srl_fifo.vhd" in Library proc_common_v3_00_a.
+Entity <SRL_FIFO> compiled.
+Entity <SRL_FIFO> (Architecture <IMP>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/srl_fifo2.vhd" in Library proc_common_v3_00_a.
+Entity <srl_fifo2> compiled.
+Entity <srl_fifo2> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/srl_fifo3.vhd" in Library proc_common_v3_00_a.
+Entity <srl_fifo3> compiled.
+Entity <srl_fifo3> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/srl_fifo_rbu.vhd" in Library proc_common_v3_00_a.
+Entity <srl_fifo_rbu> compiled.
+Entity <srl_fifo_rbu> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/valid_be.vhd" in Library proc_common_v3_00_a.
+Entity <valid_be> compiled.
+Entity <valid_be> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/or_with_enable_f.vhd" in Library proc_common_v3_00_a.
+Entity <or_with_enable_f> compiled.
+Entity <or_with_enable_f> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/dynshreg_i_f.vhd" in Library proc_common_v3_00_a.
+Entity <dynshreg_i_f> compiled.
+Entity <dynshreg_i_f> (Architecture <behavioral>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/mux_onehot_f.vhd" in Library proc_common_v3_00_a.
+Entity <mux_onehot_f> compiled.
+Entity <mux_onehot_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/srl_fifo_f.vhd" in Library proc_common_v3_00_a.
+Entity <srl_fifo_f> compiled.
+Entity <srl_fifo_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/compare_vectors_f.vhd" in Library proc_common_v3_00_a.
+Entity <compare_vectors_f> compiled.
+Entity <compare_vectors_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/counter_f.vhd" in Library proc_common_v3_00_a.
+Entity <counter_f> compiled.
+Entity <counter_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/or_gate_f.vhd" in Library proc_common_v3_00_a.
+Entity <or_gate_f> compiled.
+Entity <or_gate_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/soft_reset.vhd" in Library proc_common_v3_00_a.
+Entity <soft_reset> compiled.
+Entity <soft_reset> (Architecture <implementation>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/pselect_f.vhd" in Library proc_common_v3_00_a.
+Entity <pselect_f> compiled.
+Entity <pselect_f> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/ipif_pkg.vhd" in Library proc_common_v3_00_a.
+Package <ipif_pkg> compiled.
+Package body <ipif_pkg> compiled.
+Compiling vhdl file "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/axi_lite_ipif_v1_01_a/hdl/vhdl/address_decoder.vhd" in Library axi_lite_ipif_v1_01_a.
+Entity <address_decoder> compiled.
+Entity <address_decoder> (Architecture <IMP>) compiled.
+Compiling vhdl file "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/axi_lite_ipif_v1_01_a/hdl/vhdl/slave_attachment.vhd" in Library axi_lite_ipif_v1_01_a.
+Entity <slave_attachment> compiled.
+Entity <slave_attachment> (Architecture <imp>) compiled.
+Compiling vhdl file "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/axi_lite_ipif_v1_01_a/hdl/vhdl/axi_lite_ipif.vhd" in Library axi_lite_ipif_v1_01_a.
+Entity <axi_lite_ipif> compiled.
+Entity <axi_lite_ipif> (Architecture <imp>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/vhdl/axi_lite_ipif_3bars.vhd" in Library nf10_proc_common_v1_00_a.
+Entity <axi_lite_ipif_3bars> compiled.
+Entity <axi_lite_ipif_3bars> (Architecture <IMP>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/vhdl/axi_lite_ipif_2bars.vhd" in Library nf10_proc_common_v1_00_a.
+Entity <axi_lite_ipif_2bars> compiled.
+Entity <axi_lite_ipif_2bars> (Architecture <IMP>) compiled.
+Compiling vhdl file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/vhdl/axi_lite_ipif_1bar.vhd" in Library nf10_proc_common_v1_00_a.
+Entity <axi_lite_ipif_1bar> compiled.
+Entity <axi_lite_ipif_1bar> (Architecture <IMP>) compiled.
+Compiling verilog file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/verilog/fallthrough_small_fifo_v2.v" in library nf10_proc_common_v1_00_a
+Compiling verilog file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/verilog/small_async_fifo.v" in library nf10_proc_common_v1_00_a
+Module <fallthrough_small_fifo> compiled
+Module <small_async_fifo> compiled
+Module <sync_r2w> compiled
+Module <sync_w2r> compiled
+Module <rptr_empty> compiled
+Module <wptr_full> compiled
+Compiling verilog file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/verilog/small_fifo_v3.v" in library nf10_proc_common_v1_00_a
+Module <fifo_mem> compiled
+Compiling verilog file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/verilog/ipif_regs.v" in library nf10_proc_common_v1_00_a
+Module <small_fifo> compiled
+Compiling verilog file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/verilog/ipif_table_regs.v" in library nf10_proc_common_v1_00_a
+Module <ipif_regs> compiled
+Module <ipif_table_regs> compiled
+Compiling verilog file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_identifier_v1_00_a/hdl/verilog/nf10_identifier.v" in library nf10_identifier_v1_00_a
+Compiling verilog file "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_identifier_v1_00_a/hdl/verilog/id_rom16x32.v" in library nf10_identifier_v1_00_a
+Module <nf10_identifier> compiled
+Module <id_rom16x32> compiled
+Compiling verilog file "../hdl/nf10_identifier_0_wrapper.v" in library work
+Module <nf10_identifier_0_wrapper> compiled
+No errors in compilation
+Analysis of file <"nf10_identifier_0_wrapper_xst.prj"> succeeded.
+ 
+
+=========================================================================
+*                     Design Hierarchy Analysis                         *
+=========================================================================
+Analyzing hierarchy for module <nf10_identifier_0_wrapper> in library <work>.
+
+Analyzing hierarchy for module <nf10_identifier> in library <nf10_identifier_v1_00_a> with parameters.
+	C_BASEADDR = "01101010000000000000000000000000"
+	C_DPHASE_TIMEOUT = "00000000000000000000000000000000"
+	C_FAMILY = "virtex5"
+	C_HIGHADDR = "01101010000000001111111111111111"
+	C_S_AXI_ACLK_FREQ_HZ = "00000101111101011110000100000000"
+	C_S_AXI_ADDR_WIDTH = "00000000000000000000000000100000"
+	C_S_AXI_DATA_WIDTH = "00000000000000000000000000100000"
+	C_USE_WSTRB = "00000000000000000000000000000000"
+	NUM_RO_REGS = "00000000000000000000000000000101"
+	NUM_RW_REGS = "00000000000000000000000000000001"
+
+Analyzing hierarchy for entity <axi_lite_ipif_1bar> in library <nf10_proc_common_v1_00_a> (architecture <IMP>) with generics.
+	C_BAR0_BASEADDR = "01101010000000000000000000000000"
+	C_BAR0_HIGHADDR = "01101010000000001111111111111111"
+	C_DPHASE_TIMEOUT = 0
+	C_S_AXI_ADDR_WIDTH = 32
+	C_S_AXI_DATA_WIDTH = 32
+	C_USE_WSTRB = 0
+
+Analyzing hierarchy for entity <axi_lite_ipif> in library <axi_lite_ipif_v1_01_a> (architecture <imp>) with generics.
+	C_ARD_ADDR_RANGE_ARRAY = ("0000000000000000000000000000000001101010000000000000000000000000",
+	                          "0000000000000000000000000000000001101010000000001111111111111111")
+	C_ARD_NUM_CE_ARRAY = (1)
+	C_DPHASE_TIMEOUT = 0
+	C_FAMILY = "virtex6"
+	C_S_AXI_ADDR_WIDTH = 32
+	C_S_AXI_DATA_WIDTH = 32
+	C_S_AXI_MIN_SIZE = "00000000000000001111111111111111"
+	C_USE_WSTRB = 0
+
+Analyzing hierarchy for entity <slave_attachment> in library <axi_lite_ipif_v1_01_a> (architecture <imp>) with generics.
+	C_ARD_ADDR_RANGE_ARRAY = ("0000000000000000000000000000000001101010000000000000000000000000",
+	                          "0000000000000000000000000000000001101010000000001111111111111111")
+	C_ARD_NUM_CE_ARRAY = (1)
+	C_DPHASE_TIMEOUT = 0
+	C_FAMILY = "virtex6"
+	C_IPIF_ABUS_WIDTH = 32
+	C_IPIF_DBUS_WIDTH = 32
+	C_S_AXI_MIN_SIZE = "00000000000000001111111111111111"
+	C_USE_WSTRB = 0
+
+Analyzing hierarchy for entity <address_decoder> in library <axi_lite_ipif_v1_01_a> (architecture <IMP>) with generics.
+	C_ARD_ADDR_RANGE_ARRAY = ("0000000000000000000000000000000001101010000000000000000000000000",
+	                          "0000000000000000000000000000000001101010000000001111111111111111")
+	C_ARD_NUM_CE_ARRAY = (1)
+	C_BUS_AWIDTH = 16
+	C_FAMILY = "nofamily"
+	C_S_AXI_MIN_SIZE = "00000000000000001111111111111111"
+WARNING:Xst:821 - "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/proc_common_pkg.vhd" line 272: Loop body will iterate zero times
+
+
+=========================================================================
+*                            HDL Analysis                               *
+=========================================================================
+Analyzing top module <nf10_identifier_0_wrapper>.
+Module <nf10_identifier_0_wrapper> is correct for synthesis.
+ 
+Analyzing module <nf10_identifier> in library <nf10_identifier_v1_00_a>.
+	C_BASEADDR = 32'b01101010000000000000000000000000
+	C_DPHASE_TIMEOUT = 32'sb00000000000000000000000000000000
+	C_FAMILY = "virtex5"
+	C_HIGHADDR = 32'b01101010000000001111111111111111
+	C_S_AXI_ACLK_FREQ_HZ = 32'sb00000101111101011110000100000000
+	C_S_AXI_ADDR_WIDTH = 32'sb00000000000000000000000000100000
+	C_S_AXI_DATA_WIDTH = 32'sb00000000000000000000000000100000
+	C_USE_WSTRB = 32'sb00000000000000000000000000000000
+	NUM_RO_REGS = 32'sb00000000000000000000000000000101
+	NUM_RW_REGS = 32'sb00000000000000000000000000000001
+WARNING:Xst:2211 - "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_identifier_v1_00_a/hdl/verilog/id_rom16x32.v" line 142: Instantiating black box module <id_rom16x32>.
+Module <nf10_identifier> is correct for synthesis.
+ 
+Analyzing generic Entity <axi_lite_ipif_1bar> in library <nf10_proc_common_v1_00_a> (Architecture <IMP>).
+	C_BAR0_BASEADDR = "01101010000000000000000000000000"
+	C_BAR0_HIGHADDR = "01101010000000001111111111111111"
+	C_DPHASE_TIMEOUT = 0
+	C_S_AXI_ADDR_WIDTH = 32
+	C_S_AXI_DATA_WIDTH = 32
+	C_USE_WSTRB = 0
+WARNING:Xst:753 - "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/vhdl/axi_lite_ipif_1bar.vhd" line 128: Unconnected output port 'Bus2IP_RdCE' of component 'axi_lite_ipif'.
+WARNING:Xst:753 - "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/vhdl/axi_lite_ipif_1bar.vhd" line 128: Unconnected output port 'Bus2IP_WrCE' of component 'axi_lite_ipif'.
+Entity <axi_lite_ipif_1bar> analyzed. Unit <axi_lite_ipif_1bar> generated.
+
+Analyzing generic Entity <axi_lite_ipif> in library <axi_lite_ipif_v1_01_a> (Architecture <imp>).
+	C_ARD_ADDR_RANGE_ARRAY = ("0000000000000000000000000000000001101010000000000000000000000000",
+	                          "0000000000000000000000000000000001101010000000001111111111111111")
+	C_ARD_NUM_CE_ARRAY = (1)
+	C_DPHASE_TIMEOUT = 0
+	C_FAMILY = "virtex6"
+	C_S_AXI_ADDR_WIDTH = 32
+	C_S_AXI_DATA_WIDTH = 32
+	C_S_AXI_MIN_SIZE = "00000000000000001111111111111111"
+	C_USE_WSTRB = 0
+Entity <axi_lite_ipif> analyzed. Unit <axi_lite_ipif> generated.
+
+Analyzing generic Entity <slave_attachment> in library <axi_lite_ipif_v1_01_a> (Architecture <imp>).
+	C_ARD_ADDR_RANGE_ARRAY = ("0000000000000000000000000000000001101010000000000000000000000000",
+	                          "0000000000000000000000000000000001101010000000001111111111111111")
+	C_ARD_NUM_CE_ARRAY = (1)
+	C_DPHASE_TIMEOUT = 0
+	C_FAMILY = "virtex6"
+	C_IPIF_ABUS_WIDTH = 32
+	C_IPIF_DBUS_WIDTH = 32
+	C_S_AXI_MIN_SIZE = "00000000000000001111111111111111"
+	C_USE_WSTRB = 0
+WARNING:Xst:753 - "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/axi_lite_ipif_v1_01_a/hdl/vhdl/slave_attachment.vhd" line 336: Unconnected output port 'CS_for_gaps' of component 'address_decoder'.
+Entity <slave_attachment> analyzed. Unit <slave_attachment> generated.
+
+Analyzing generic Entity <address_decoder> in library <axi_lite_ipif_v1_01_a> (Architecture <IMP>).
+	C_ARD_ADDR_RANGE_ARRAY = ("0000000000000000000000000000000001101010000000000000000000000000",
+	                          "0000000000000000000000000000000001101010000000001111111111111111")
+	C_ARD_NUM_CE_ARRAY = (1)
+	C_BUS_AWIDTH = 16
+	C_FAMILY = "nofamily"
+	C_S_AXI_MIN_SIZE = "00000000000000001111111111111111"
+WARNING:Xst:821 - "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/proc_common_v3_00_a/hdl/vhdl/proc_common_pkg.vhd" line 272: Loop body will iterate zero times
+Entity <address_decoder> analyzed. Unit <address_decoder> generated.
+
+
+=========================================================================
+*                           HDL Synthesis                               *
+=========================================================================
+
+Performing bidirectional port resolution...
+
+Synthesizing Unit <address_decoder>.
+    Related source file is "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/axi_lite_ipif_v1_01_a/hdl/vhdl/address_decoder.vhd".
+WARNING:Xst:647 - Input <Address_In_Erly<0:13>> is never used. This port will be preserved and left unconnected if it belongs to a top-level block or it belongs to a sub-block and the hierarchy of this sub-block is preserved.
+WARNING:Xst:647 - Input <Bus_RNW> is never used. This port will be preserved and left unconnected if it belongs to a top-level block or it belongs to a sub-block and the hierarchy of this sub-block is preserved.
+WARNING:Xst:1780 - Signal <wrce_expnd_i> is never used or assigned. This unconnected signal will be trimmed during the optimization process.
+WARNING:Xst:1780 - Signal <rdce_expnd_i> is never used or assigned. This unconnected signal will be trimmed during the optimization process.
+WARNING:Xst:646 - Signal <addr_out_s_h> is assigned but never used. This unconnected signal will be trimmed during the optimization process.
+    Found 1-bit register for signal <Bus_RNW_reg>.
+    Found 1-bit register for signal <ce_out_i<0>>.
+    Found 1-bit register for signal <cs_out_i<0>>.
+    Summary:
+	inferred   3 D-type flip-flop(s).
+Unit <address_decoder> synthesized.
+
+
+Synthesizing Unit <slave_attachment>.
+    Related source file is "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/axi_lite_ipif_v1_01_a/hdl/vhdl/slave_attachment.vhd".
+WARNING:Xst:647 - Input <S_AXI_ARADDR<31:16>> is never used. This port will be preserved and left unconnected if it belongs to a top-level block or it belongs to a sub-block and the hierarchy of this sub-block is preserved.
+WARNING:Xst:647 - Input <S_AXI_AWADDR<31:16>> is never used. This port will be preserved and left unconnected if it belongs to a top-level block or it belongs to a sub-block and the hierarchy of this sub-block is preserved.
+WARNING:Xst:647 - Input <S_AXI_WSTRB> is never used. This port will be preserved and left unconnected if it belongs to a top-level block or it belongs to a sub-block and the hierarchy of this sub-block is preserved.
+WARNING:Xst:1780 - Signal <s_axi_arready_i> is never used or assigned. This unconnected signal will be trimmed during the optimization process.
+WARNING:Xst:1780 - Signal <cs_for_gaps_i> is never used or assigned. This unconnected signal will be trimmed during the optimization process.
+    Found finite state machine <FSM_0> for signal <state>.
+    -----------------------------------------------------------------------
+    | States             | 4                                              |
+    | Transitions        | 14                                             |
+    | Inputs             | 9                                              |
+    | Outputs            | 3                                              |
+    | Clock              | S_AXI_ACLK                (rising_edge)        |
+    | Reset              | rst                       (positive)           |
+    | Reset type         | synchronous                                    |
+    | Reset State        | sm_idle                                        |
+    | Power Up State     | sm_idle                                        |
+    | Encoding           | automatic                                      |
+    | Implementation     | automatic                                      |
+    -----------------------------------------------------------------------
+    Found 1-bit register for signal <rst>.
+    Found 2-bit register for signal <s_axi_bresp_i>.
+    Found 1-bit register for signal <s_axi_bvalid_i>.
+    Found 32-bit register for signal <s_axi_rdata_i>.
+    Found 2-bit register for signal <s_axi_rresp_i>.
+    Found 1-bit register for signal <s_axi_rvalid_i>.
+    Summary:
+	inferred   1 Finite State Machine(s).
+	inferred  39 D-type flip-flop(s).
+Unit <slave_attachment> synthesized.
+
+
+Synthesizing Unit <axi_lite_ipif>.
+    Related source file is "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/axi_lite_ipif_v1_01_a/hdl/vhdl/axi_lite_ipif.vhd".
+Unit <axi_lite_ipif> synthesized.
+
+
+Synthesizing Unit <axi_lite_ipif_1bar>.
+    Related source file is "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_proc_common_v1_00_a/hdl/vhdl/axi_lite_ipif_1bar.vhd".
+Unit <axi_lite_ipif_1bar> synthesized.
+
+
+Synthesizing Unit <nf10_identifier>.
+    Related source file is "/root/NetFPGA-10G-live/lib/hw/std/pcores/nf10_identifier_v1_00_a/hdl/verilog/nf10_identifier.v".
+WARNING:Xst:646 - Signal <addr_valid_n> is assigned but never used. This unconnected signal will be trimmed during the optimization process.
+WARNING:Xst:646 - Signal <Bus2IP_Resetn> is assigned but never used. This unconnected signal will be trimmed during the optimization process.
+WARNING:Xst:646 - Signal <Bus2IP_Data> is assigned but never used. This unconnected signal will be trimmed during the optimization process.
+WARNING:Xst:646 - Signal <Bus2IP_Clk> is assigned but never used. This unconnected signal will be trimmed during the optimization process.
+WARNING:Xst:646 - Signal <Bus2IP_BE> is assigned but never used. This unconnected signal will be trimmed during the optimization process.
+    Found 32-bit register for signal <IP2Bus_Data>.
+    Found 1-bit register for signal <IP2Bus_RdAck>.
+    Found 1-bit register for signal <IP2Bus_WrAck>.
+    Found 1-bit register for signal <r_rd_delay_0>.
+    Found 1-bit register for signal <r_rd_delay_1>.
+    Summary:
+	inferred  36 D-type flip-flop(s).
+Unit <nf10_identifier> synthesized.
+
+
+Synthesizing Unit <nf10_identifier_0_wrapper>.
+    Related source file is "../hdl/nf10_identifier_0_wrapper.v".
+Unit <nf10_identifier_0_wrapper> synthesized.
+
+
+=========================================================================
+HDL Synthesis Report
+
+Macro Statistics
+# Registers                                            : 14
+ 1-bit register                                        : 10
+ 2-bit register                                        : 2
+ 32-bit register                                       : 2
+
+=========================================================================
+
+=========================================================================
+*                       Advanced HDL Synthesis                          *
+=========================================================================
+
+Analyzing FSM <FSM_0> for best encoding.
+Optimizing FSM <nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/state/FSM> on signal <state[1:2]> with user encoding.
+----------------------
+ State    | Encoding
+----------------------
+ sm_idle  | 00
+ sm_read  | 01
+ sm_write | 10
+ sm_resp  | 11
+----------------------
+
+=========================================================================
+Advanced HDL Synthesis Report
+
+Macro Statistics
+# FSMs                                                 : 1
+# Registers                                            : 78
+ Flip-Flops                                            : 78
+
+=========================================================================
+
+=========================================================================
+*                         Low Level Synthesis                           *
+=========================================================================
+WARNING:Xst:1293 - FF/Latch <s_axi_bresp_i_0> has a constant value of 0 in block <slave_attachment>. This FF/Latch will be trimmed during the optimization process.
+WARNING:Xst:1896 - Due to other FF/Latch trimming, FF/Latch <s_axi_bresp_i_1> has a constant value of 0 in block <slave_attachment>. This FF/Latch will be trimmed during the optimization process.
+WARNING:Xst:1896 - Due to other FF/Latch trimming, FF/Latch <s_axi_rresp_i_0> has a constant value of 0 in block <slave_attachment>. This FF/Latch will be trimmed during the optimization process.
+WARNING:Xst:1896 - Due to other FF/Latch trimming, FF/Latch <s_axi_rresp_i_1> has a constant value of 0 in block <slave_attachment>. This FF/Latch will be trimmed during the optimization process.
+INFO:Xst:2261 - The FF/Latch <I_DECODER/cs_out_i_0> in Unit <slave_attachment> is equivalent to the following FF/Latch, which will be removed : <I_DECODER/ce_out_i_0> 
+
+Optimizing unit <nf10_identifier_0_wrapper> ...
+
+Optimizing unit <slave_attachment> ...
+
+Optimizing unit <nf10_identifier> ...
+WARNING:Xst:2677 - Node <nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/Bus_RNW_reg> of sequential type is unconnected in block <nf10_identifier_0_wrapper>.
+
+Mapping all equations...
+Building and optimizing final netlist ...
+
+Final Macro Processing ...
+
+=========================================================================
+Final Register Report
+
+Macro Statistics
+# Registers                                            : 74
+ Flip-Flops                                            : 74
+
+=========================================================================
+
+=========================================================================
+*                           Partition Report                            *
+=========================================================================
+
+Partition Implementation Status
+-------------------------------
+
+  No Partitions were found in this design.
+
+-------------------------------
+
+=========================================================================
+*                            Final Report                               *
+=========================================================================
+Final Results
+Top Level Output File Name         : ../implementation/nf10_identifier_0_wrapper.ngc
+Output Format                      : ngc
+Optimization Goal                  : speed
+Keep Hierarchy                     : no
+
+Design Statistics
+# IOs                              : 148
+
+Cell Usage :
+# BELS                             : 20
+#      GND                         : 1
+#      INV                         : 1
+#      LUT2                        : 5
+#      LUT3                        : 8
+#      LUT4                        : 2
+#      LUT5                        : 1
+#      LUT6                        : 1
+#      VCC                         : 1
+# FlipFlops/Latches                : 74
+#      FDR                         : 3
+#      FDRE                        : 67
+#      FDRS                        : 2
+#      FDRSE                       : 2
+# Others                           : 1
+#      id_rom16x32                 : 1
+=========================================================================
+
+Device utilization summary:
+---------------------------
+
+Selected Device : 5vtx240tff1759-2 
+
+
+Slice Logic Utilization: 
+ Number of Slice Registers:              74  out of  149760     0%  
+ Number of Slice LUTs:                   18  out of  149760     0%  
+    Number used as Logic:                18  out of  149760     0%  
+
+Slice Logic Distribution: 
+ Number of LUT Flip Flop pairs used:     80
+   Number with an unused Flip Flop:       6  out of     80     7%  
+   Number with an unused LUT:            62  out of     80    77%  
+   Number of fully used LUT-FF pairs:    12  out of     80    15%  
+   Number of unique control sets:        11
+
+IO Utilization: 
+ Number of IOs:                         148
+ Number of bonded IOBs:                   0  out of    680     0%  
+
+Specific Feature Utilization:
+
+---------------------------
+Partition Resource Summary:
+---------------------------
+
+  No Partitions were found in this design.
+
+---------------------------
+
+
+=========================================================================
+TIMING REPORT
+
+NOTE: THESE TIMING NUMBERS ARE ONLY A SYNTHESIS ESTIMATE.
+      FOR ACCURATE TIMING INFORMATION PLEASE REFER TO THE TRACE REPORT
+      GENERATED AFTER PLACE-and-ROUTE.
+
+Clock Information:
+------------------
+-----------------------------------+----------------------------------------------------------------------------------+-------+
+Clock Signal                       | Clock buffer(FF name)                                                            | Load  |
+-----------------------------------+----------------------------------------------------------------------------------+-------+
+S_AXI_ACLK                         | NONE(nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/rst)| 74    |
+-----------------------------------+----------------------------------------------------------------------------------+-------+
+INFO:Xst:2169 - HDL ADVISOR - Some clock signals were not automatically buffered by XST with BUFG/BUFR resources. Please use the buffer_type constraint in order to insert these buffers to the clock signals to help prevent skew problems.
+
+Asynchronous Control Signals Information:
+----------------------------------------
+No asynchronous control signals found in this design
+
+Timing Summary:
+---------------
+Speed Grade: -2
+
+   Minimum period: 1.862ns (Maximum Frequency: 536.942MHz)
+   Minimum input arrival time before clock: 1.154ns
+   Maximum output required time after clock: 1.268ns
+   Maximum combinational path delay: 0.498ns
+
+Timing Detail:
+--------------
+All values displayed in nanoseconds (ns)
+
+=========================================================================
+Timing constraint: Default period analysis for Clock 'S_AXI_ACLK'
+  Clock period: 1.862ns (frequency: 536.942MHz)
+  Total number of paths / destination ports: 261 / 147
+-------------------------------------------------------------------------
+Delay:               1.862ns (Levels of Logic = 1)
+  Source:            nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/state_FSM_FFd1 (FF)
+  Destination:       nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/s_axi_rvalid_i (FF)
+  Source Clock:      S_AXI_ACLK rising
+  Destination Clock: S_AXI_ACLK rising
+
+  Data Path: nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/state_FSM_FFd1 to nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/s_axi_rvalid_i
+                                Gate     Net
+    Cell:in->out      fanout   Delay   Delay  Logical Name (Net Name)
+    ----------------------------------------  ------------
+     FDRS:C->Q             6   0.396   0.623  nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/state_FSM_FFd1 (nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/state_FSM_FFd1)
+     LUT3:I0->O            2   0.086   0.290  nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/state_FSM_FFd1-In41 (nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/s_axi_rvalid_i_and0000)
+     FDRSE:S                   0.468          nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/s_axi_rvalid_i
+    ----------------------------------------
+    Total                      1.862ns (0.950ns logic, 0.912ns route)
+                                       (51.0% logic, 49.0% route)
+
+=========================================================================
+Timing constraint: Default OFFSET IN BEFORE for Clock 'S_AXI_ACLK'
+  Total number of paths / destination ports: 88 / 78
+-------------------------------------------------------------------------
+Offset:              1.154ns (Levels of Logic = 1)
+  Source:            S_AXI_ARESETN (PAD)
+  Destination:       nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_out_i_0 (FF)
+  Destination Clock: S_AXI_ACLK rising
+
+  Data Path: S_AXI_ARESETN to nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_out_i_0
+                                Gate     Net
+    Cell:in->out      fanout   Delay   Delay  Logical Name (Net Name)
+    ----------------------------------------  ------------
+     LUT3:I0->O            1   0.086   0.286  nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_ce_clr1 (nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_ce_clr)
+     FDRE:R                    0.468          nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_out_i_0
+    ----------------------------------------
+    Total                      1.154ns (0.868ns logic, 0.286ns route)
+                                       (75.2% logic, 24.8% route)
+
+=========================================================================
+Timing constraint: Default OFFSET OUT AFTER for Clock 'S_AXI_ACLK'
+  Total number of paths / destination ports: 38 / 38
+-------------------------------------------------------------------------
+Offset:              1.268ns (Levels of Logic = 1)
+  Source:            nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_out_i_0 (FF)
+  Destination:       nf10_identifier_0/id_rom16x32:ena (PAD)
+  Source Clock:      S_AXI_ACLK rising
+
+  Data Path: nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_out_i_0 to nf10_identifier_0/id_rom16x32:ena
+                                Gate     Net
+    Cell:in->out      fanout   Delay   Delay  Logical Name (Net Name)
+    ----------------------------------------  ------------
+     FDRE:C->Q             4   0.396   0.500  nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_out_i_0 (nf10_identifier_0/axi_lite_ipif_inst/AXI_LITE_IPIF_I/I_SLAVE_ATTACHMENT/I_DECODER/cs_out_i_0)
+     LUT2:I0->O            1   0.086   0.286  nf10_identifier_0/w_rden1 (nf10_identifier_0/w_rden)
+    id_rom16x32:ena            0.000          nf10_identifier_0/id_rom16x32
+    ----------------------------------------
+    Total                      1.268ns (0.482ns logic, 0.786ns route)
+                                       (38.0% logic, 62.0% route)
+
+=========================================================================
+Timing constraint: Default path analysis
+  Total number of paths / destination ports: 14 / 6
+-------------------------------------------------------------------------
+Delay:               0.498ns (Levels of Logic = 1)
+  Source:            S_AXI_ARVALID (PAD)
+  Destination:       nf10_identifier_0/id_rom16x32:ena (PAD)
+
+  Data Path: S_AXI_ARVALID to nf10_identifier_0/id_rom16x32:ena
+                                Gate     Net
+    Cell:in->out      fanout   Delay   Delay  Logical Name (Net Name)
+    ----------------------------------------  ------------
+     LUT2:I1->O            1   0.086   0.286  nf10_identifier_0/w_rden1 (nf10_identifier_0/w_rden)
+    id_rom16x32:ena            0.000          nf10_identifier_0/id_rom16x32
+    ----------------------------------------
+    Total                      0.498ns (0.212ns logic, 0.286ns route)
+                                       (42.6% logic, 57.4% route)
+
+=========================================================================
+
+
+Total REAL time to Xst completion: 5.00 secs
+Total CPU time to Xst completion: 4.61 secs
+ 
+--> 
+
+
+Total memory usage is 699464 kilobytes
+
+Number of errors   :    0 (   0 filtered)
+Number of warnings :   26 (   0 filtered)
+Number of infos    :    2 (   0 filtered)
+
