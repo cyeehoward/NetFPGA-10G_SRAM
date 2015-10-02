@@ -184,7 +184,7 @@ module qdrii_top #
    wire [DATA_WIDTH-1:0] dummy_wrl;
    wire [DATA_WIDTH-1:0] dummy_wrh;
    wire                  dummy_wren;
-   wire                  cal_done_r;
+   //wire                  cal_done_r;
    
    //added for burst2 non-fifo case
    

@@ -87,7 +87,7 @@ module AxiToFifo
     output                          tuser_rempty,
     output                          tuser_r_almost_empty,
     output                          tuser_dout_valid,
-    output [((8*CROPPED_TDATA_WIDTH+9)-1):0]  tuser_dout,
+    output [(TUSER_WIDTH-1):0]  tuser_dout,
     ///////////////////////////////////////////////
     input                           cal_done,
     input                           output_inc,

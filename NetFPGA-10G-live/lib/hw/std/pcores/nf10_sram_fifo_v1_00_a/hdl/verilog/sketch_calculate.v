@@ -38,7 +38,7 @@ module sketch_calculate
     	input  							axififo_empty,	
     	input  	        					axififo_din_valid,
     	input  	[((8*CROPPED_TDATA_WIDTH+9)-1):0]		axififo_din,	
-	input 			        			axififo_mem_queue_full,
+	//input 			        			axififo_mem_queue_full,
 	output reg 						inc,
 	output reg 						inc_tuser,
 	output	 						din_inc,
@@ -156,8 +156,8 @@ module sketch_calculate
 	//axi to fifo --> asyc_fifo read enable
 	always@(*)
 	begin
-		inc = axififo_din_valid && ((~axififo_empty) && ~axififo_mem_queue_full);
-		inc_tuser = dout_valid_tuser && ((~rempty_tuser) && ~axififo_mem_queue_full);
+		inc = axififo_din_valid && ((~axififo_empty));// && ~axififo_mem_queue_full
+		inc_tuser = dout_valid_tuser && ((~rempty_tuser));// && ~axififo_mem_queue_full
 	end
 	
 endmodule

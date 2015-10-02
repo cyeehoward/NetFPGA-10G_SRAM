@@ -268,6 +268,7 @@ module nf10_sram_fifo
     wire 	[((TDATA_WIDTH / 2)-1):0] 	data_ID; 			//2-universal hash value --> for identify the data in SRAM
     wire	[((TDATA_WIDTH/2) - 1) : 0]	packet_byte;
     wire					packet_byte_vaild;
+    wire	[(NUM_MEMORY_CHIPS-1) : 0]	qdr_cal_done;
     wire	[2:0]				fifo_cal_done , fifo_rd_en;
     /*********************************************************************************************/
     genvar i;
@@ -328,7 +329,7 @@ module nf10_sram_fifo
 				.axififo_empty(rempty_in),	
 				.axififo_din_valid(dout_valid_in),
 				.axififo_din(dout_in[((8*CROPPED_TDATA_WIDTH+9)-1):0]),	
-				.axififo_mem_queue_full(mem_wfull),
+				//.axififo_mem_queue_full(mem_wfull),
 				.inc(rinc_in),						//async valid
 				.inc_tuser(rinc_in_tuser),				//tuser_async valid
 				.din_inc(hash_read_valid),				//SRAM address valid
@@ -371,15 +372,15 @@ module nf10_sram_fifo
                   r_w_ctrl(
                           .clk(memclk),
                           .reset(memreset),
-                          .read_queue_id(mem_queue_id_read),
+                          //.read_queue_id(mem_queue_id_read),
                           .read_data_queue_id(mem_din_queue_id),
-                          .read_data_ready(winc_out),
+                          //.read_data_ready(winc_out),
                           .read_data(mem_din),
                           .read_data_valid(mem_din_valid),
                           .read_empty(mem_rempty),
                           .read_burst_state(read_burst), 
-                          .write_queue_id(0), 
-                          .write_data({137'd0 , packet_byte , data_ID , universal_data}),
+                          //.write_queue_id(0), 
+                          .write_data({137'd15 , packet_byte , data_ID , universal_data}),
                           .write_data_addr(universal_data),
                           .write_data_valid(hash_read_valid & packet_byte_vaild),
                           .write_full(mem_wfull), 
@@ -393,88 +394,229 @@ module nf10_sram_fifo
                           .din_addr(mem_controller_din_addr),
                           .din_ready(mem_controller_din_ready),
                           .sram_write_full(|mem_controller_write_ready),
-                          .sram_read_full(|mem_controller_read_ready)
+                          .sram_read_full(|mem_controller_read_ready),
+			  .cal_done(qdr_cal_done[0] | qdr_cal_done[1] | qdr_cal_done[2])
                           );
 
     localparam IODELAY_GRP = "IODELAY_MIG";
     wire idelay_ctrl_rdy;
 
-    generate
-    for(i=0;i<NUM_MEMORY_CHIPS;i=i+1)
-    begin : qdrcontrollers
-        qdrii_top #(
-                .ADDR_WIDTH(MEM_ADDR_WIDTH),
-                .BURST_LENGTH(4),
-                .BW_WIDTH(MEM_BW_WIDTH),
-                .CLK_PERIOD(4000),
-                //.CLK_FREQ(160),
-                .CLK_WIDTH(MEM_CLK_WIDTH),
-                .CQ_WIDTH(MEM_CQ_WIDTH),
-                .DATA_WIDTH(MEM_WIDTH),
-                .DEBUG_EN(0),
-                .HIGH_PERFORMANCE_MODE("TRUE"),
-                .IODELAY_GRP(IODELAY_GRP),
-                .MEMORY_WIDTH(36),
-                .SIM_ONLY(1)) 
-               qdrii_controller
-               (
-                .clk0(memclk),
-                .clk180(memclk_180),
-                .clk270(memclk_270),
-                .user_rst_0(memreset),
-                .user_rst_180(memreset_180),
-                .user_rst_270(memreset_270),
-                .user_ad_w_n(~mem_controller_dout_ready),
-                .user_d_w_n(~mem_controller_dout_ready),
-                .user_ad_wr(mem_controller_dout_addr),
-                .user_bwh_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
-                .user_bwl_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
-                .user_dwl(mem_controller_dout[((MEM_WIDTH*2*i)+MEM_WIDTH-1):(MEM_WIDTH*2*i)]),
-                .user_dwh(mem_controller_dout[((MEM_WIDTH*2)*(i+1)-1):((MEM_WIDTH*2*i)+MEM_WIDTH)]),
-                .user_r_n(~mem_controller_din_ready),
-                .user_ad_rd(mem_controller_din_addr),         
-                .user_wr_full(mem_controller_write_ready[i]),
-                .user_rd_full(mem_controller_read_ready[i]),
-                .user_qrl(mem_controller_din[((MEM_WIDTH*2*i)+MEM_WIDTH-1):((MEM_WIDTH*2*i))]),
-                .user_qrh(mem_controller_din[((MEM_WIDTH*2)*(i+1)-1):((MEM_WIDTH*2*i)+MEM_WIDTH)]),
-                .user_qr_valid(mem_controller_din_valid[i]),
-                .idelay_ctrl_rdy(idelay_ctrl_rdy),
-                .qdr_q(qdr_q[((MEM_WIDTH)*(i+1)-1):((MEM_WIDTH)*i)]), 
-                .qdr_cq(qdr_cq[(MEM_CQ_WIDTH*(i+1)-1):(MEM_CQ_WIDTH*i)]), 
-                .qdr_cq_n(qdr_cq_n[(MEM_CQ_WIDTH*(i+1)-1):(MEM_CQ_WIDTH*i)]), 
-                .qdr_c(qdr_c[(MEM_CLK_WIDTH*(i+1)-1):(MEM_CLK_WIDTH*i)]),
-                .qdr_c_n(qdr_c_n[(MEM_CLK_WIDTH*(i+1)-1):(MEM_CLK_WIDTH*i)]),
-                .qdr_dll_off_n(qdr_dll_off_n[i]),
-                .qdr_k(qdr_k[(MEM_CLK_WIDTH*(i+1)-1):(MEM_CLK_WIDTH*i)]),
-                .qdr_k_n(qdr_k_n[(MEM_CLK_WIDTH*(i+1)-1):(MEM_CLK_WIDTH*i)]),
-                .qdr_sa(qdr_sa[(MEM_ADDR_WIDTH*(i+1)-1):(MEM_ADDR_WIDTH*i)]),
-                .qdr_bw_n(qdr_bw_n[((MEM_BW_WIDTH)*(i+1)-1):((MEM_BW_WIDTH)*i)]),
-                .qdr_w_n(qdr_w_n[i]),
-                .qdr_d(qdr_d[((MEM_WIDTH)*(i+1)-1):((MEM_WIDTH)*i)]),
-                .qdr_r_n(qdr_r_n[i]),
-                .cal_done(),//next_cal_done[i]),
-                .dbg_idel_up_all        (1'b0),
-                .dbg_idel_down_all      (1'b0),
-                .dbg_idel_up_q_cq       (1'b0),
-                .dbg_idel_down_q_cq     (1'b0),
-                .dbg_idel_up_q_cq_n     (1'b0),
-                .dbg_idel_down_q_cq_n   (1'b0),
-                .dbg_idel_up_cq         (1'b0),
-                .dbg_idel_down_cq       (1'b0),
-                .dbg_idel_up_cq_n       (1'b0),
-                .dbg_idel_down_cq_n     (1'b0),
-                .dbg_sel_idel_q_cq      ({MEM_CQ_WIDTH{1'b0}}),
-                .dbg_sel_all_idel_q_cq  (1'b0),
-                .dbg_sel_idel_q_cq_n    ({MEM_CQ_WIDTH{1'b0}}),
-                .dbg_sel_all_idel_q_cq_n  (1'b0),
-                .dbg_sel_idel_cq        ({MEM_CQ_WIDTH{1'b0}}),
-                .dbg_sel_all_idel_cq    (1'b0),
-                .dbg_sel_idel_cq_n      ({MEM_CQ_WIDTH{1'b0}}),
-                .dbg_sel_all_idel_cq_n  (1'b0)
-
-);
-    end
-    endgenerate 
+    qdrii_top 
+	#(
+		.ADDR_WIDTH(MEM_ADDR_WIDTH),
+		.BURST_LENGTH(4),
+		.BW_WIDTH(MEM_BW_WIDTH),
+		.CLK_PERIOD(4000),
+		//.CLK_FREQ(160),
+		.CLK_WIDTH(MEM_CLK_WIDTH),
+		.CQ_WIDTH(MEM_CQ_WIDTH),
+		.DATA_WIDTH(MEM_WIDTH),
+		.DEBUG_EN(0),
+		.HIGH_PERFORMANCE_MODE("TRUE"),
+		.IODELAY_GRP(IODELAY_GRP),
+		.MEMORY_WIDTH(36),
+		.SIM_ONLY(1)
+	) 
+	qdrii_controller_0
+	(
+		.clk0(memclk),
+		.clk180(memclk_180),
+		.clk270(memclk_270),
+		.user_rst_0(memreset),
+		.user_rst_180(memreset_180),
+		.user_rst_270(memreset_270),
+		.user_ad_w_n(~mem_controller_dout_ready),
+		.user_d_w_n(~mem_controller_dout_ready),
+		.user_ad_wr(mem_controller_dout_addr),
+		.user_bwh_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
+		.user_bwl_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
+		.user_dwl(mem_controller_dout[(MEM_WIDTH-1):0]),
+		.user_dwh(mem_controller_dout[((MEM_WIDTH*2)-1):MEM_WIDTH]),
+		.user_r_n(~mem_controller_din_ready),
+		.user_ad_rd(mem_controller_din_addr),         
+		.user_wr_full(mem_controller_write_ready[0]),
+		.user_rd_full(mem_controller_read_ready[0]),
+		.user_qrl(mem_controller_din[(MEM_WIDTH-1):0]),
+		.user_qrh(mem_controller_din[((MEM_WIDTH*2)-1):MEM_WIDTH]),
+		.user_qr_valid(mem_controller_din_valid[0]),
+		.idelay_ctrl_rdy(idelay_ctrl_rdy),
+		.qdr_q(qdr_q[((MEM_WIDTH)-1):0]), 
+		.qdr_cq(qdr_cq[(MEM_CQ_WIDTH-1):0]), 
+		.qdr_cq_n(qdr_cq_n[(MEM_CQ_WIDTH-1):0]), 
+		.qdr_c(qdr_c[(MEM_CLK_WIDTH-1):0]),
+		.qdr_c_n(qdr_c_n[(MEM_CLK_WIDTH-1):0]),
+		.qdr_dll_off_n(qdr_dll_off_n[0]),
+		.qdr_k(qdr_k[(MEM_CLK_WIDTH-1):0]),
+		.qdr_k_n(qdr_k_n[(MEM_CLK_WIDTH-1):0]),
+		.qdr_sa(qdr_sa[(MEM_ADDR_WIDTH-1):0]),
+		.qdr_bw_n(qdr_bw_n[((MEM_BW_WIDTH)-1):0]),
+		.qdr_w_n(qdr_w_n[0]),
+		.qdr_d(qdr_d[((MEM_WIDTH)-1):0]),
+		.qdr_r_n(qdr_r_n[0]),
+		.cal_done(qdr_cal_done[0]),//next_cal_done[0]),
+		.dbg_idel_up_all        (1'b0),
+		.dbg_idel_down_all      (1'b0),
+		.dbg_idel_up_q_cq       (1'b0),
+		.dbg_idel_down_q_cq     (1'b0),
+		.dbg_idel_up_q_cq_n     (1'b0),
+		.dbg_idel_down_q_cq_n   (1'b0),
+		.dbg_idel_up_cq         (1'b0),
+		.dbg_idel_down_cq       (1'b0),
+		.dbg_idel_up_cq_n       (1'b0),
+		.dbg_idel_down_cq_n     (1'b0),
+		.dbg_sel_idel_q_cq      ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_q_cq  (1'b0),
+		.dbg_sel_idel_q_cq_n    ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_q_cq_n  (1'b0),
+		.dbg_sel_idel_cq        ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_cq    (1'b0),
+		.dbg_sel_idel_cq_n      ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_cq_n  (1'b0)
+	);	
+	qdrii_top 
+	#(
+		.ADDR_WIDTH(MEM_ADDR_WIDTH),
+		.BURST_LENGTH(4),
+		.BW_WIDTH(MEM_BW_WIDTH),
+		.CLK_PERIOD(4000),
+		//.CLK_FREQ(160),
+		.CLK_WIDTH(MEM_CLK_WIDTH),
+		.CQ_WIDTH(MEM_CQ_WIDTH),
+		.DATA_WIDTH(MEM_WIDTH),
+		.DEBUG_EN(0),
+		.HIGH_PERFORMANCE_MODE("TRUE"),
+		.IODELAY_GRP(IODELAY_GRP),
+		.MEMORY_WIDTH(36),
+		.SIM_ONLY(1)
+	) 
+	qdrii_controller_1
+	(
+		.clk0(memclk),
+		.clk180(memclk_180),
+		.clk270(memclk_270),
+		.user_rst_0(memreset),
+		.user_rst_180(memreset_180),
+		.user_rst_270(memreset_270),
+		.user_ad_w_n(~mem_controller_dout_ready),
+		.user_d_w_n(~mem_controller_dout_ready),
+		.user_ad_wr(mem_controller_dout_addr),
+		.user_bwh_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
+		.user_bwl_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
+		.user_dwl(mem_controller_dout[((MEM_WIDTH*2*1)+MEM_WIDTH-1):(MEM_WIDTH*2*1)]),
+		.user_dwh(mem_controller_dout[((MEM_WIDTH*2)*(1+1)-1):((MEM_WIDTH*2*1)+MEM_WIDTH)]),
+		.user_r_n(~mem_controller_din_ready),
+		.user_ad_rd(mem_controller_din_addr),         
+		.user_wr_full(mem_controller_write_ready[1]),
+		.user_rd_full(mem_controller_read_ready[1]),
+		.user_qrl(mem_controller_din[((MEM_WIDTH*2*1)+MEM_WIDTH-1):((MEM_WIDTH*2*1))]),
+		.user_qrh(mem_controller_din[((MEM_WIDTH*2)*(1+1)-1):((MEM_WIDTH*2*1)+MEM_WIDTH)]),
+		.user_qr_valid(mem_controller_din_valid[1]),
+		.idelay_ctrl_rdy(idelay_ctrl_rdy),
+		.qdr_q(qdr_q[((MEM_WIDTH)*(1+1)-1):((MEM_WIDTH)*1)]), 
+		.qdr_cq(qdr_cq[(MEM_CQ_WIDTH*(1+1)-1):(MEM_CQ_WIDTH*1)]), 
+		.qdr_cq_n(qdr_cq_n[(MEM_CQ_WIDTH*(1+1)-1):(MEM_CQ_WIDTH*1)]), 
+		.qdr_c(qdr_c[(MEM_CLK_WIDTH*(1+1)-1):(MEM_CLK_WIDTH*1)]),
+		.qdr_c_n(qdr_c_n[(MEM_CLK_WIDTH*(1+1)-1):(MEM_CLK_WIDTH*1)]),
+		.qdr_dll_off_n(qdr_dll_off_n[1]),
+		.qdr_k(qdr_k[(MEM_CLK_WIDTH*(1+1)-1):(MEM_CLK_WIDTH*1)]),
+		.qdr_k_n(qdr_k_n[(MEM_CLK_WIDTH*(1+1)-1):(MEM_CLK_WIDTH*1)]),
+		.qdr_sa(qdr_sa[(MEM_ADDR_WIDTH*(1+1)-1):(MEM_ADDR_WIDTH*1)]),
+		.qdr_bw_n(qdr_bw_n[((MEM_BW_WIDTH)*(1+1)-1):((MEM_BW_WIDTH)*1)]),
+		.qdr_w_n(qdr_w_n[1]),
+		.qdr_d(qdr_d[((MEM_WIDTH)*(1+1)-1):((MEM_WIDTH)*1)]),
+		.qdr_r_n(qdr_r_n[1]),
+		.cal_done(qdr_cal_done[1]),//next_cal_done[1]),
+		.dbg_idel_up_all        (1'b0),
+		.dbg_idel_down_all      (1'b0),
+		.dbg_idel_up_q_cq       (1'b0),
+		.dbg_idel_down_q_cq     (1'b0),
+		.dbg_idel_up_q_cq_n     (1'b0),
+		.dbg_idel_down_q_cq_n   (1'b0),
+		.dbg_idel_up_cq         (1'b0),
+		.dbg_idel_down_cq       (1'b0),
+		.dbg_idel_up_cq_n       (1'b0),
+		.dbg_idel_down_cq_n     (1'b0),
+		.dbg_sel_idel_q_cq      ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_q_cq  (1'b0),
+		.dbg_sel_idel_q_cq_n    ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_q_cq_n  (1'b0),
+		.dbg_sel_idel_cq        ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_cq    (1'b0),
+		.dbg_sel_idel_cq_n      ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_cq_n  (1'b0)
+	);	
+	qdrii_top 
+	#(
+		.ADDR_WIDTH(MEM_ADDR_WIDTH),
+		.BURST_LENGTH(4),
+		.BW_WIDTH(MEM_BW_WIDTH),
+		.CLK_PERIOD(4000),
+		//.CLK_FREQ(160),
+		.CLK_WIDTH(MEM_CLK_WIDTH),
+		.CQ_WIDTH(MEM_CQ_WIDTH),
+		.DATA_WIDTH(MEM_WIDTH),
+		.DEBUG_EN(0),
+		.HIGH_PERFORMANCE_MODE("TRUE"),
+		.IODELAY_GRP(IODELAY_GRP),
+		.MEMORY_WIDTH(36),
+		.SIM_ONLY(1)
+	) 
+	qdrii_controller_2
+	(
+		.clk0(memclk),
+		.clk180(memclk_180),
+		.clk270(memclk_270),
+		.user_rst_0(memreset),
+		.user_rst_180(memreset_180),
+		.user_rst_270(memreset_270),
+		.user_ad_w_n(~mem_controller_dout_ready),
+		.user_d_w_n(~mem_controller_dout_ready),
+		.user_ad_wr(mem_controller_dout_addr),
+		.user_bwh_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
+		.user_bwl_n(4'b0/*{(MEM_BW_WIDTH){~mem_controller_dout_ready}}*/),
+		.user_dwl(mem_controller_dout[((MEM_WIDTH*2*2)+MEM_WIDTH-1):(MEM_WIDTH*2*2)]),
+		.user_dwh(mem_controller_dout[((MEM_WIDTH*2)*(2+1)-1):((MEM_WIDTH*2*2)+MEM_WIDTH)]),
+		.user_r_n(~mem_controller_din_ready),
+		.user_ad_rd(mem_controller_din_addr),         
+		.user_wr_full(mem_controller_write_ready[2]),
+		.user_rd_full(mem_controller_read_ready[2]),
+		.user_qrl(mem_controller_din[((MEM_WIDTH*2*2)+MEM_WIDTH-1):((MEM_WIDTH*2*2))]),
+		.user_qrh(mem_controller_din[((MEM_WIDTH*2)*(2+1)-1):((MEM_WIDTH*2*2)+MEM_WIDTH)]),
+		.user_qr_valid(mem_controller_din_valid[2]),
+		.idelay_ctrl_rdy(idelay_ctrl_rdy),
+		.qdr_q(qdr_q[((MEM_WIDTH)*(2+1)-1):((MEM_WIDTH)*2)]), 
+		.qdr_cq(qdr_cq[(MEM_CQ_WIDTH*(2+1)-1):(MEM_CQ_WIDTH*2)]), 
+		.qdr_cq_n(qdr_cq_n[(MEM_CQ_WIDTH*(2+1)-1):(MEM_CQ_WIDTH*2)]), 
+		.qdr_c(qdr_c[(MEM_CLK_WIDTH*(2+1)-1):(MEM_CLK_WIDTH*2)]),
+		.qdr_c_n(qdr_c_n[(MEM_CLK_WIDTH*(2+1)-1):(MEM_CLK_WIDTH*2)]),
+		.qdr_dll_off_n(qdr_dll_off_n[2]),
+		.qdr_k(qdr_k[(MEM_CLK_WIDTH*(2+1)-1):(MEM_CLK_WIDTH*2)]),
+		.qdr_k_n(qdr_k_n[(MEM_CLK_WIDTH*(2+1)-1):(MEM_CLK_WIDTH*2)]),
+		.qdr_sa(qdr_sa[(MEM_ADDR_WIDTH*(2+1)-1):(MEM_ADDR_WIDTH*2)]),
+		.qdr_bw_n(qdr_bw_n[((MEM_BW_WIDTH)*(2+1)-1):((MEM_BW_WIDTH)*2)]),
+		.qdr_w_n(qdr_w_n[2]),
+		.qdr_d(qdr_d[((MEM_WIDTH)*(2+1)-1):((MEM_WIDTH)*2)]),
+		.qdr_r_n(qdr_r_n[2]),
+		.cal_done(qdr_cal_done[2]),//next_cal_done[2]),
+		.dbg_idel_up_all        (1'b0),
+		.dbg_idel_down_all      (1'b0),
+		.dbg_idel_up_q_cq       (1'b0),
+		.dbg_idel_down_q_cq     (1'b0),
+		.dbg_idel_up_q_cq_n     (1'b0),
+		.dbg_idel_down_q_cq_n   (1'b0),
+		.dbg_idel_up_cq         (1'b0),
+		.dbg_idel_down_cq       (1'b0),
+		.dbg_idel_up_cq_n       (1'b0),
+		.dbg_idel_down_cq_n     (1'b0),
+		.dbg_sel_idel_q_cq      ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_q_cq  (1'b0),
+		.dbg_sel_idel_q_cq_n    ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_q_cq_n  (1'b0),
+		.dbg_sel_idel_cq        ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_cq    (1'b0),
+		.dbg_sel_idel_cq_n      ({MEM_CQ_WIDTH{1'b0}}),
+		.dbg_sel_all_idel_cq_n  (1'b0)
+	);	
 
     // TODO: re-add cal done - don't overuse with fanout - only use to get out
     // of an initial state
@@ -544,7 +686,7 @@ module nf10_sram_fifo
     );
 
 
-    FifoAxiArbiter #(.TDATA_WIDTH(CROPPED_TDATA_WIDTH),
+    /*FifoAxiArbiter #(.TDATA_WIDTH(CROPPED_TDATA_WIDTH),
                      .TUSER_WIDTH(TUSER_WIDTH),
                      .NUM_QUEUES(NUM_QUEUES), 
                      .QUEUE_ID_WIDTH(QUEUE_ID_WIDTH)) 
@@ -558,7 +700,7 @@ module nf10_sram_fifo
                           .din_valid(mem_din_valid),
                           .din(mem_din),
                           .din_queue_id(mem_din_queue_id),
-                          .mem_queue_empty(mem_rempty /*| (|mem_controller_read_ready)*/),
+                          .mem_queue_empty(mem_rempty ),
                           .queue_id(mem_queue_id_read),
                           .dout(din_out),
                           .dout_valid(din_valid_out)
@@ -590,6 +732,6 @@ module nf10_sram_fifo
                           .cal_done(&cal_done),
                           .rinc(output_inc),
                           .output_fifo_cnt(output_fifo_cnt[31:0])
-                          );
+                          );*/
 
 endmodule
