@@ -108,7 +108,29 @@ module r_w_ctrl
 			din_ready <= next_din_ready;
 		end
 	end
-	
+	///////////////////////////////////////////////////////////////////////////////	
+	//din vaild count	
+	reg	vaild_count;
+	always@(posedge clk)
+	begin
+		if(reset)
+		begin
+			vaild_count <= 1'b0;
+		end
+		else if(write_data_valid)
+		begin
+			vaild_count <= vaild_count + 1;
+		end
+		else if(din_valid)
+		begin
+			vaild_count <= 1'b0;
+		end
+		else
+		begin
+			vaild_count <= vaild_count;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////	
 	always@(*)
 	begin
 		next_dout_burst_ready = 1'b0;
@@ -177,7 +199,7 @@ module r_w_ctrl
 				begin
 					nextstate_init = READ;
 				end
-				else if(din_valid)
+				else if(din_valid && vaild_count)
 				begin
 					nextstate_init = WRITE;
 				end
@@ -196,7 +218,41 @@ module r_w_ctrl
 			begin
 				next_dout_burst_ready = 1'b1;
 				next_dout_addr = {7'd0 , rmw_addr[10:0]};
-				next_dout_data = {108'd0 , count_data[15:0] , {16'd0 , count_data[31:16]} , 60'd1};//{SRAM_ID , flow count , byte count}
+				//compare
+				if(din[215:200] == 16'd0)
+				begin	
+					next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+					{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd1;	//packet count
+					{next_dout_data[131:108] , next_dout_data[71:36]} = {44'd0 , count_data[31:16]};	//byte count
+					next_dout_data[179:144] = 36'd0;
+					next_dout_data[107:72] = 36'd0;
+					next_dout_data[35:0] = 36'd0;
+				end
+				else if(din[215:200] == count_data[15:0])
+				begin		
+					{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 1;	//packet count
+					{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16];	//byte count
+					next_dout_data[179:144] = din[179:144];
+					next_dout_data[107:72] = din[107:72];
+					next_dout_data[35:0] = din[35:0];
+				end
+				else if(din[179:164] == 16'd0)
+				begin
+					next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+					{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd1;	//packet count
+					{next_dout_data[85:72] , next_dout_data[35:0]} = {44'd0 , count_data[31:16]};	//byte count
+					next_dout_data[215:180] = din[215:180];
+					next_dout_data[143:108] = din[143:108];
+					next_dout_data[71:36] = din[71:36];
+				end
+				else if(din[179:164] == count_data[15:0])
+				begin		
+					{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 1;	//packet count
+					{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16];	//byte count
+					next_dout_data[215:180] = din[215:180];
+					next_dout_data[143:108] = din[143:108];
+					next_dout_data[71:36] = din[71:36];
+				end
 				next_din_ready = 1'b1;
 				next_din_addr = {7'd0 , rmw_addr[10:0]};
 				nextstate_init = READ_WRITE_WAIT;

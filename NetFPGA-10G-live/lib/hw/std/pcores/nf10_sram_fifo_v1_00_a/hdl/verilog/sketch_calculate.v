@@ -145,7 +145,7 @@ module sketch_calculate
 	  .clk(memclk), // input clk
 	  .rst(reset), // input rst
 	  .din(fifo_tuser), // input [15 : 0] din
-	  .wr_en(axififo_din_valid), // input wr_en
+	  .wr_en(dout_valid_tuser), // input wr_en
 	  .rd_en(fifo_en), // input rd_en
 	  .dout(packet_byte), // output [15 : 0] dout
 	  .full(), // output full

@@ -160,7 +160,7 @@ module nf10_sram_fifo
     //memory controll signals
     wire [NUM_MEM_CHIPS*(MEM_WIDTH)-1:0]  qdr_q = {qdr_q_2,qdr_q_1,qdr_q_0};
     wire [NUM_MEM_CHIPS*MEM_CQ_WIDTH-1:0]    qdr_cq = {qdr_cq_2,qdr_cq_1,qdr_cq_0};
-    wire [NUM_MEM_CHIPS*MEM_CQ_WIDTH-1:0]    qdr_cq_n = {qdr_cq_n_2,qdr_cq_n_1,qdr_cq_n_0};
+    wire [NUM_MEM_CHIPS*MEM_CQ_WIDTH-1:0]    qdr_cq_n = {qdr_cq_n_1,qdr_cq_n_1,qdr_cq_n_0};
     wire [NUM_MEM_CHIPS*MEM_CLK_WIDTH-1:0]  qdr_c;
     assign qdr_c_2 = qdr_c[3*MEM_CLK_WIDTH-1:2*MEM_CLK_WIDTH];
     assign qdr_c_1 = qdr_c[2*MEM_CLK_WIDTH-1:1*MEM_CLK_WIDTH];
@@ -324,7 +324,7 @@ module nf10_sram_fifo
 				.reset(memreset),
 				.memclk(memclk),
 				.tuser(tuser_dout_in[(TUSER_WIDTH-1):0]),				
-				.dout_valid_tuser(dout_valid_in_tuser),
+				.dout_valid_tuser(tuser_dout_valid_in),
 				.rempty_tuser(rempty_in_tuser),
 				.axififo_empty(rempty_in),	
 				.axififo_din_valid(dout_valid_in),
@@ -438,7 +438,7 @@ module nf10_sram_fifo
 		.user_rd_full(mem_controller_read_ready[0]),
 		.user_qrl(mem_controller_din[(MEM_WIDTH-1):0]),
 		.user_qrh(mem_controller_din[((MEM_WIDTH*2)-1):MEM_WIDTH]),
-		.user_qr_valid(mem_controller_din_valid[0]),
+		.delay_user_qr_valid(mem_controller_din_valid[0]),
 		.idelay_ctrl_rdy(idelay_ctrl_rdy),
 		.qdr_q(qdr_q[((MEM_WIDTH)-1):0]), 
 		.qdr_cq(qdr_cq[(MEM_CQ_WIDTH-1):0]), 
@@ -510,7 +510,7 @@ module nf10_sram_fifo
 		.user_rd_full(mem_controller_read_ready[1]),
 		.user_qrl(mem_controller_din[((MEM_WIDTH*2*1)+MEM_WIDTH-1):((MEM_WIDTH*2*1))]),
 		.user_qrh(mem_controller_din[((MEM_WIDTH*2)*(1+1)-1):((MEM_WIDTH*2*1)+MEM_WIDTH)]),
-		.user_qr_valid(mem_controller_din_valid[1]),
+		.delay_user_qr_valid(mem_controller_din_valid[1]),
 		.idelay_ctrl_rdy(idelay_ctrl_rdy),
 		.qdr_q(qdr_q[((MEM_WIDTH)*(1+1)-1):((MEM_WIDTH)*1)]), 
 		.qdr_cq(qdr_cq[(MEM_CQ_WIDTH*(1+1)-1):(MEM_CQ_WIDTH*1)]), 
@@ -582,7 +582,7 @@ module nf10_sram_fifo
 		.user_rd_full(mem_controller_read_ready[2]),
 		.user_qrl(mem_controller_din[((MEM_WIDTH*2*2)+MEM_WIDTH-1):((MEM_WIDTH*2*2))]),
 		.user_qrh(mem_controller_din[((MEM_WIDTH*2)*(2+1)-1):((MEM_WIDTH*2*2)+MEM_WIDTH)]),
-		.user_qr_valid(mem_controller_din_valid[2]),
+		.delay_user_qr_valid(mem_controller_din_valid[2]),
 		.idelay_ctrl_rdy(idelay_ctrl_rdy),
 		.qdr_q(qdr_q[((MEM_WIDTH)*(2+1)-1):((MEM_WIDTH)*2)]), 
 		.qdr_cq(qdr_cq[(MEM_CQ_WIDTH*(2+1)-1):(MEM_CQ_WIDTH*2)]), 

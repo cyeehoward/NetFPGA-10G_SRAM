@@ -111,7 +111,7 @@ module qdrii_top #
    output                  user_rd_full,
    output [DATA_WIDTH-1:0] user_qrl,
    output [DATA_WIDTH-1:0] user_qrh,
-   output                  user_qr_valid,
+   output reg              delay_user_qr_valid,
    output                  cal_done,
    output [CLK_WIDTH-1:0]  qdr_c,
    output [CLK_WIDTH-1:0]  qdr_c_n,
@@ -159,6 +159,20 @@ module qdrii_top #
    output                    dbg_cal_done,
    output                    dbg_data_valid
    );
+///////////////////////////////////////////////////////////////
+   wire	user_qr_valid;
+   always@(posedge clk0)
+   begin
+	if(user_rst_0)
+	begin
+		delay_user_qr_valid <= 1'b0;
+	end
+	else
+	begin
+		delay_user_qr_valid <= user_qr_valid;
+	end
+   end
+///////////////////////////////////////////////////////////////
 
    localparam Q_PER_CQ = DATA_WIDTH/((CQ_WIDTH*(MEMORY_WIDTH/36))+CQ_WIDTH);
    // Number of read data bits associated with a single read strobe.
