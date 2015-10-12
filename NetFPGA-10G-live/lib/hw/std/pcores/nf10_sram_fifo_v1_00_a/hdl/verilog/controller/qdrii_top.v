@@ -112,6 +112,7 @@ module qdrii_top #
    output [DATA_WIDTH-1:0] user_qrl,
    output [DATA_WIDTH-1:0] user_qrh,
    output reg              delay_user_qr_valid,
+   output                  user_qr_valid,
    output                  cal_done,
    output [CLK_WIDTH-1:0]  qdr_c,
    output [CLK_WIDTH-1:0]  qdr_c_n,
