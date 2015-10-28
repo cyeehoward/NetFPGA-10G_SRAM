@@ -40,10 +40,10 @@ module r_w_ctrl
 	input                          					reset,
 	
 	output reg [(QUEUE_ID_WIDTH-1):0]  				read_data_queue_id,
-    output reg [((8*TDATA_WIDTH+9)-1):0]  				read_data,
-    output                         					read_data_valid,
-    output reg 			  					read_empty,
-    output reg                     					read_burst_state,
+    	output reg [((8*TDATA_WIDTH+9)-1):0]  				read_data,
+    	output                         					read_data_valid,
+    	output reg 			  				read_empty,
+    	output reg                     					read_burst_state,
 	
 	input 		[((8*TDATA_WIDTH+9)-1):0]  			write_data,
 	input 		[31:0]  					write_data_addr,
@@ -53,24 +53,23 @@ module r_w_ctrl
 
 	input                          					sram_read_full,
 	input                          					sram_write_full,
-	output reg 	[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 	dout,
+	output reg 	[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 		dout,
 	output reg 	[(MEM_ADDR_WIDTH-1):0]  			dout_addr,
 	output reg                         				dout_burst_ready,
-	input  		[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 	din,
-	input  		[(NUM_MEM_CHIPS-1):0]            	din_valid,
-	input  		[(NUM_MEM_CHIPS-1):0]            	pre_din_valid,
+	input  		[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 		din,
+	input  		[(NUM_MEM_CHIPS-1):0]            		din_valid,
+	input  		[(NUM_MEM_CHIPS-1):0]            		pre_din_valid,
 	output reg 	[(MEM_ADDR_WIDTH-1):0]  			din_addr,
 	output reg                         				din_ready,
 	input								cal_done
 );
 	reg		[2:0]	state_init , nextstate_init;
-	parameter IDLE = 0 , INIT = 1 , INIT_READ = 2 , READ_WRITE_WAIT = 3 , READ = 4 , WRITE = 5;
+	parameter IDLE = 0 , INIT = 1 , INIT_READ = 2 , READ_WRITE_WAIT = 3 , READ = 4 , WRITE = 5 , INIT_READ_1 = 6;
 	reg 		[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 	next_dout_data;
 	reg 		[(MEM_ADDR_WIDTH-1):0]  		next_dout_addr;
 	reg                         				next_dout_burst_ready;
 	reg 		[(MEM_ADDR_WIDTH-1):0]  		next_din_addr;
 	reg                         				next_din_ready;
-	reg		[(MEM_ADDR_WIDTH-1):0]			delay_data_addr;
 	reg		[11:0]					reg_rmw_addr;
 	wire		[18:0]					rmw_addr;
 	wire		[31:0]					count_data;
@@ -78,7 +77,30 @@ module r_w_ctrl
 	reg							pre_count_data_num , count_data_num;
 	reg							pre_mod_finish , mod_finish;
 	reg							data_r_en , write_data_rn;
+	reg							delay_read;
 
+	///////////////////////////////////////////////////////////////////////////////	
+	//for fifo read vaild
+	reg	[18:0]	test;
+	always@(posedge clk)
+	begin
+		if(reset)
+		begin
+			test <= 1'b0;
+		end
+		else if((test == 19'd6000) && (state_init == INIT_READ))
+		begin
+			test <= test;
+		end
+		else if((test == 19'd7000) && (state_init == INIT_READ_1))
+		begin
+			test <= test;
+		end
+		else
+		begin
+			test <= test + 1'b1;
+		end
+	end
 	///////////////////////////////////////////////////////////////////////////////	
 	//for fifo read vaild
 	reg	count_data_rn;
@@ -99,20 +121,21 @@ module r_w_ctrl
 	end
 	///////////////////////////////////////////////////////////////////////////////	
 	//din vaild count	
-	reg	[(MEM_WIDTH*NUM_MEM_INPUTS-1):0]	delay_din;
+	reg	[(MEM_WIDTH*NUM_MEM_INPUTS-1):0]	delay_din , delay_1_din;
 	always@(posedge clk)
 	begin
 		if(reset)
 		begin
-			delay_din <= 216'd0;
+			delay_din <= 1'b1;
+			delay_1_din <= 1'b1;
 		end
 		else
 		begin
 			delay_din <= din;
+			delay_1_din <= delay_din;
 		end
 	end
 	///////////////////////////////////////////////////////////////////////////////	
-
 	//delay two clock cycle while need to read but in write state	
 	reg 		[((8*TDATA_WIDTH+9)-1):0]  			delay1_write_data;
 	reg 		[31:0]  					delay1_write_data_addr;
@@ -120,6 +143,8 @@ module r_w_ctrl
 	reg 		[((8*TDATA_WIDTH+9)-1):0]  			delay2_write_data;
 	reg 		[31:0]  					delay2_write_data_addr;
 	reg                          					delay2_write_data_valid;
+	reg 		[31:0]  					delay3_write_data_addr;
+	reg                          					delay3_write_data_valid;
 	always@(posedge clk)
 	begin
 		if(reset)
@@ -139,6 +164,8 @@ module r_w_ctrl
 			delay2_write_data <= delay1_write_data;
 			delay2_write_data_addr <= delay1_write_data_addr;		
 			delay2_write_data_valid <= delay1_write_data_valid;
+			delay3_write_data_addr <= delay2_write_data_addr;		
+			delay3_write_data_valid <= delay2_write_data_valid;
 		end
 	end
 	///////////////////////////////////////////////////////////////////////////////	
@@ -154,7 +181,7 @@ module r_w_ctrl
 		begin
 			vaild_count <= vaild_count + 1;
 		end
-		else if(dout_burst_ready)
+		else if(dout_burst_ready)// || (write_data_valid || delay1_write_data_valid)
 		begin
 			if(vaild_count == 8'd0)
 			begin
@@ -168,6 +195,19 @@ module r_w_ctrl
 		else
 		begin
 			vaild_count <= vaild_count;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////
+	reg	[(MEM_ADDR_WIDTH-1):0]	delay_data_addr;
+	always@(posedge clk)
+	begin
+		if(reset)
+		begin
+			delay_data_addr <= 19'd0;
+		end
+		else
+		begin
+			delay_data_addr <= write_data_addr;
 		end
 	end
 	///////////////////////////////////////////////////////////////////////////////
@@ -217,7 +257,7 @@ module r_w_ctrl
 		count_data_num = 1'b0;
 		mod_finish = 1'b0;
 		write_data_rn = 1'b0;
-		//delay_2_write_data = 0;
+		delay_read = 1'b0;
 		case(state_init)
 			IDLE : 
 			begin
@@ -242,32 +282,60 @@ module r_w_ctrl
 				begin
 					next_dout_burst_ready = 1'b0;
 					next_dout_data = 216'd0;
-					nextstate_init = READ_WRITE_WAIT;
+					nextstate_init = INIT_READ;
 					next_dout_addr = 19'd0;
 				end
 				else
 				begin
 					next_dout_burst_ready = 1'b1;
+					//next_dout_data = dout_addr + 1'b1;
 					next_dout_data = 216'd0;
 					next_dout_addr = dout_addr + 1'b1;
 					nextstate_init = INIT;
 				end
 			end
-			/*INIT_READ : 									//ensure the memory are all zero --> read from all memory location
+			INIT_READ : 									//ensure the memory are all zero --> read from all memory location
 			begin
-				if(din_addr == 19'b111_1111_1111_1111_1111)
+				if(din_addr == 11'd8)
 				begin
 					next_din_ready = 1'b0;
 					next_din_addr = 19'd0;
-					nextstate_init = OFF_state;
+					nextstate_init = INIT_READ_1;
 				end
-				else
+				else if(test == 19'd6000)
 				begin
 					next_din_ready = 1'b1;
 					next_din_addr = din_addr + 1'b1;
 					nextstate_init = INIT_READ;
 				end
-			end*/
+				else
+				begin
+					next_din_ready = 1'b0;
+					next_din_addr = 19'd0;
+					nextstate_init = INIT_READ;
+				end
+			end
+			INIT_READ_1 : 									//ensure the memory are all zero --> read from all memory location
+			begin
+				if(din_addr == 11'd16)
+				begin
+					next_din_ready = 1'b0;
+					next_din_addr = 19'd0;
+					nextstate_init = READ_WRITE_WAIT;
+				end
+				else if(test == 19'd7000)
+				begin
+					next_din_ready = 1'b1;
+					next_din_addr = din_addr + 1'b1;
+					nextstate_init = INIT_READ_1;
+				end
+				else
+				begin
+					next_din_ready = 1'b0;
+					next_din_addr = 19'd0;
+					nextstate_init = INIT_READ_1;
+				end
+			end
 			READ_WRITE_WAIT : 								//stay at this state after initialization
 			begin
 				next_dout_burst_ready = 1'b0;
@@ -290,8 +358,15 @@ module r_w_ctrl
 			end
 			READ : 
 			begin
-				next_din_ready = 1'b1;
-				next_din_addr = {7'd0 , delay_data_addr[10:0]};
+				next_din_ready = 1'b1;		
+				if(delay3_write_data_valid)
+				begin
+					next_din_addr = {7'd0 , delay3_write_data_addr[10:0]};
+				end
+				else
+				begin
+					next_din_addr = {7'd0 , delay_data_addr[10:0]};
+				end
 				if(din_valid && (vaild_count != 8'd0))
 				begin
 					nextstate_init = WRITE;
@@ -394,15 +469,7 @@ module r_w_ctrl
 						next_dout_data = delay_din;
 						mod_finish = 0;
 					end
-					nextstate_init = WRITE;
-					/*if(write_data_valid)
-					begin
-						delay_2_write_data = 1;
-					end
-					else
-					begin
-						delay_2_write_data = 0;
-					end*/
+
 				end
 				else					//second data
 				begin
@@ -482,12 +549,16 @@ module r_w_ctrl
 						next_dout_data[143:108] = delay_din[143:108];
 						next_dout_data[71:36] = delay_din[71:36];
 					end
+					else if(delay2_write_data_valid|delay1_write_data_valid)
+					begin
+						delay_read = 1'b1;
+					end
 					else
 					begin
 						next_dout_data = delay_din;
 					end
 					mod_finish = 0;
-					if(write_data_valid)
+					if(write_data_valid|delay_read)
 					begin
 						nextstate_init = READ;
 					end
@@ -509,19 +580,7 @@ module r_w_ctrl
 				next_din_addr = 19'd0;
 			end
 		endcase
-	end	
-
-	always@(posedge clk)
-	begin
-		if(reset)
-		begin
-			delay_data_addr <= 19'd0;
-		end
-		else
-		begin
-			delay_data_addr <= write_data_addr;
-		end
-	end	
+	end		
 	
 	fifo_addr_delay 
 	fifo_addr_delay 
