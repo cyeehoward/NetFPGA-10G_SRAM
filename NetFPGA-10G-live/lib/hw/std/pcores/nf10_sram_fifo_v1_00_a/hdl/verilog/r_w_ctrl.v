@@ -409,7 +409,7 @@ module r_w_ctrl
 						if((write_data[47:32] == delay_din[215:200] || delay1_write_data[47:32] == delay_din[215:200]) && (write_data_valid || delay1_write_data_valid))
 						begin
 							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;;	//packet count
+							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;	//packet count
 							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16] + write_data[63:48];
 							write_data_rn = 1'b1;
 						end
@@ -497,7 +497,7 @@ module r_w_ctrl
 						if((write_data[47:32] == delay_din[215:200] || delay1_write_data[47:32] == delay_din[215:200]) && (delay1_write_data_valid || delay2_write_data_valid))
 						begin
 							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;;	//packet count
+							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;	//packet count
 							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16] + write_data[63:48];
 							write_data_rn = 1'b1;
 						end
