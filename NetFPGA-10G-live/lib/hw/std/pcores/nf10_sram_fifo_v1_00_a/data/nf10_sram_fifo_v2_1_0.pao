@@ -36,6 +36,7 @@ lib nf10_sram_fifo_v1_00_a fifoaxi.v verilog
 lib nf10_sram_fifo_v1_00_a axififoarbiter.v verilog
 lib nf10_sram_fifo_v1_00_a fifoaxiarbiter.v verilog
 lib nf10_sram_fifo_v1_00_a r_w_ctrl.v verilog
+lib nf10_sram_fifo_v1_00_a count_delay.v verilog
 lib nf10_sram_fifo_v1_00_a nf10_sram_fifo.v verilog
 lib nf10_sram_fifo_v1_00_a async_fifo.v verilog
 lib nf10_sram_fifo_v1_00_a small_fifo_v3.v verilog
