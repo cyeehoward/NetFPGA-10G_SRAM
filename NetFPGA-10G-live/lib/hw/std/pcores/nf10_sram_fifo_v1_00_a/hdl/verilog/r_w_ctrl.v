@@ -40,8 +40,8 @@ module r_w_ctrl
 	input                          					reset,
 	
 	output reg [(QUEUE_ID_WIDTH-1):0]  				read_data_queue_id,
-    	output reg [((8*TDATA_WIDTH+9)-1):0]  				read_data,
-    	output                         					read_data_valid,
+   	output reg [((8*TDATA_WIDTH+9)-1):0]  				read_data,
+   	output                         					read_data_valid,
     	output reg 			  				read_empty,
     	output reg                     					read_burst_state,
 	
@@ -63,24 +63,46 @@ module r_w_ctrl
 	output reg                         				din_ready,
 	input								cal_done
 );
-	reg		[2:0]	state_init , nextstate_init;
+	//state declare
+	reg		[2:0]						state_init , nextstate_init;
 	parameter IDLE = 0 , INIT = 1 , INIT_READ = 2 , READ_WRITE_WAIT = 3 , READ = 4 , WRITE = 5 , INIT_READ_1 = 6;
-	reg 		[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 	next_dout_data;
-	reg 		[(MEM_ADDR_WIDTH-1):0]  		next_dout_addr;
-	reg                         				next_dout_burst_ready;
-	reg 		[(MEM_ADDR_WIDTH-1):0]  		next_din_addr;
-	reg                         				next_din_ready;
-	reg		[11:0]					reg_rmw_addr;
-	wire		[18:0]					rmw_addr;
-	wire		[31:0]					count_data;
-	wire							delay_addr_valid , count_delay_valid;
-	reg							pre_count_data_num , count_data_num;
-	reg							pre_mod_finish , mod_finish;
-	reg							data_r_en , write_data_rn;
-	reg							delay_read;
+	
+	reg 		[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 		next_dout_data;
+	reg 		[(MEM_ADDR_WIDTH-1):0]  			next_dout_addr;
+	reg                         					next_dout_burst_ready;
+	reg 		[(MEM_ADDR_WIDTH-1):0]  			next_din_addr;
+	reg                         					next_din_ready;
+	reg		[11:0]						reg_rmw_addr;
+	reg		[18:0]						rmw_addr;
+	wire								delay_addr_valid , count_delay_valid;
+	reg								pre_count_data_num , count_data_num;
+	reg								pre_mod_finish , mod_finish;
+	reg								data_r_en , write_data_rn;
+	reg								delay_read;
+	reg		[1:0]						read_vaild_num;
+	//use shift register to save the data
+	reg		[3:0]		change_data;
+	reg		[13:0]		data_bit_array;
+	reg		[54:0]		addr_count_data			[13:0];
+	reg		[3:0]		packet_count_ID_0;
+	reg		[15:0]		byte_count_ID_0;
+	reg		[15:0]		SRAM_ID_0;
+	reg		[35:0]		addr_count_data_ID_1	[12:0];
+	reg		[3:0]		packet_count_ID_1;
+	reg		[15:0]		byte_count_ID_1;
+	reg		[15:0]		SRAM_ID_1;
+	reg		[35:0]		addr_count_data_ID_2	[12:0];
+	reg		[3:0]		packet_count_ID_2;
+	reg		[15:0]		byte_count_ID_2;
+	reg		[15:0]		SRAM_ID_2;
+	reg		[35:0]		addr_count_data_ID_3	[11:0];
+	reg		[3:0]		packet_count_ID_3;
+	reg		[15:0]		byte_count_ID_3;
+	reg		[15:0]		SRAM_ID_3;
 
 	///////////////////////////////////////////////////////////////////////////////	
-	//for fifo read vaild
+	//for initial data read
+	//only for test 
 	reg	[18:0]	test;
 	always@(posedge clk)
 	begin
@@ -102,9 +124,9 @@ module r_w_ctrl
 		end
 	end
 	///////////////////////////////////////////////////////////////////////////////	
-	//for fifo read vaild
+	//for counting the data finish
 	reg	count_data_rn;
-	always@(posedge clk)
+	always@(posedge clk or negedge reset)
 	begin
 		if(reset)
 		begin
@@ -120,14 +142,14 @@ module r_w_ctrl
 		end
 	end
 	///////////////////////////////////////////////////////////////////////////////	
-	//din vaild count	
+	//din data delay to wait for the address and data	
 	reg	[(MEM_WIDTH*NUM_MEM_INPUTS-1):0]	delay_din , delay_1_din;
-	always@(posedge clk)
+	always@(posedge clk or negedge reset)
 	begin
 		if(reset)
 		begin
-			delay_din <= 1'b1;
-			delay_1_din <= 1'b1;
+			delay_din <= 216'b0;
+			delay_1_din <= 216'b0;
 		end
 		else
 		begin
@@ -137,15 +159,19 @@ module r_w_ctrl
 	end
 	///////////////////////////////////////////////////////////////////////////////	
 	//delay two clock cycle while need to read but in write state	
-	reg 		[((8*TDATA_WIDTH+9)-1):0]  			delay1_write_data;
-	reg 		[31:0]  					delay1_write_data_addr;
-	reg                          					delay1_write_data_valid;
-	reg 		[((8*TDATA_WIDTH+9)-1):0]  			delay2_write_data;
-	reg 		[31:0]  					delay2_write_data_addr;
-	reg                          					delay2_write_data_valid;
-	reg 		[31:0]  					delay3_write_data_addr;
-	reg                          					delay3_write_data_valid;
-	always@(posedge clk)
+	reg 		[((8*TDATA_WIDTH+9)-1):0]  	delay1_write_data;
+	reg 		[31:0]  			delay1_write_data_addr;
+	reg                          			delay1_write_data_valid;
+	reg 		[((8*TDATA_WIDTH+9)-1):0]  	delay2_write_data;
+	reg 		[31:0]  			delay2_write_data_addr;
+	reg                          			delay2_write_data_valid;
+	reg 		[((8*TDATA_WIDTH+9)-1):0]  	delay3_write_data;
+	reg 		[31:0]  			delay3_write_data_addr;
+	reg                          			delay3_write_data_valid;
+	reg 		[((8*TDATA_WIDTH+9)-1):0]  	delay4_write_data;
+	reg 		[31:0]  			delay4_write_data_addr;
+	reg                          			delay4_write_data_valid;
+	always@(posedge clk or negedge reset)
 	begin
 		if(reset)
 		begin
@@ -155,6 +181,12 @@ module r_w_ctrl
 			delay2_write_data <= 201'd0;
 			delay2_write_data_addr <= 32'd0;		
 			delay2_write_data_valid <= 1'b0;
+			delay3_write_data <= 201'd0;
+			delay3_write_data_addr <= 32'd0;		
+			delay3_write_data_valid <= 1'b0;
+			delay4_write_data <= 201'd0;
+			delay4_write_data_addr <= 32'd0;		
+			delay4_write_data_valid <= 1'b0;
 		end
 		else
 		begin
@@ -164,14 +196,18 @@ module r_w_ctrl
 			delay2_write_data <= delay1_write_data;
 			delay2_write_data_addr <= delay1_write_data_addr;		
 			delay2_write_data_valid <= delay1_write_data_valid;
+			delay3_write_data <= delay2_write_data;
 			delay3_write_data_addr <= delay2_write_data_addr;		
 			delay3_write_data_valid <= delay2_write_data_valid;
+			delay4_write_data <= delay3_write_data;
+			delay4_write_data_addr <= delay3_write_data_addr;		
+			delay4_write_data_valid <= delay3_write_data_valid;
 		end
 	end
 	///////////////////////////////////////////////////////////////////////////////	
 	//din data delay --> wait for the state change	
 	reg	[7:0]	vaild_count;
-	always@(posedge clk)
+	always@(posedge clk or negedge reset)
 	begin
 		if(reset)
 		begin
@@ -198,22 +234,9 @@ module r_w_ctrl
 		end
 	end
 	///////////////////////////////////////////////////////////////////////////////
-	reg	[(MEM_ADDR_WIDTH-1):0]	delay_data_addr;
-	always@(posedge clk)
-	begin
-		if(reset)
-		begin
-			delay_data_addr <= 19'd0;
-		end
-		else
-		begin
-			delay_data_addr <= write_data_addr;
-		end
-	end
-	///////////////////////////////////////////////////////////////////////////////
 
 	//FSM for initialization
-	always@(posedge clk)
+	always@(posedge clk or negedge reset)
 	begin
 		if(reset)
 		begin
@@ -224,7 +247,7 @@ module r_w_ctrl
 			state_init <= nextstate_init;
 		end
 	end
-	always@(posedge clk)
+	always@(posedge clk or negedge reset)
 	begin
 		if(reset)
 		begin
@@ -258,6 +281,8 @@ module r_w_ctrl
 		mod_finish = 1'b0;
 		write_data_rn = 1'b0;
 		delay_read = 1'b0;
+		change_data = 4'd0;
+		read_vaild_num = 2'd0;
 		case(state_init)
 			IDLE : 
 			begin
@@ -282,7 +307,7 @@ module r_w_ctrl
 				begin
 					next_dout_burst_ready = 1'b0;
 					next_dout_data = 216'd0;
-					nextstate_init = INIT_READ;
+					nextstate_init = INIT_READ;//READ_WRITE_WAIT
 					next_dout_addr = 19'd0;
 				end
 				else
@@ -296,7 +321,7 @@ module r_w_ctrl
 			end
 			INIT_READ : 									//ensure the memory are all zero --> read from all memory location
 			begin
-				if(din_addr == 11'd8)
+				if(din_addr == 11'd16)
 				begin
 					next_din_ready = 1'b0;
 					next_din_addr = 19'd0;
@@ -317,7 +342,7 @@ module r_w_ctrl
 			end
 			INIT_READ_1 : 									//ensure the memory are all zero --> read from all memory location
 			begin
-				if(din_addr == 11'd16)
+				if(din_addr == 11'b111_1111_1111)
 				begin
 					next_din_ready = 1'b0;
 					next_din_addr = 19'd0;
@@ -358,16 +383,126 @@ module r_w_ctrl
 			end
 			READ : 
 			begin
-				next_din_ready = 1'b1;		
-				if(delay3_write_data_valid)
+				//command read addr or change data in DFFs	
+				if(data_bit_array != 14'd0)
 				begin
-					next_din_addr = {7'd0 , delay3_write_data_addr[10:0]};
+					//compare addr to formal --> if the addr match one of the addr in DFFs --> no need to send read signal and read addr to QDR controllor
+					if(((addr_count_data[0][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[0][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd1;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[1][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[1][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd2;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[2][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[2][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd3;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[3][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[3][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd4;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[4][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[4][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd5;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[5][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[5][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd6;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[6][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[6][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd7;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[7][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[7][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd8;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[8][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[8][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd9;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[9][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[9][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd10;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[10][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[10][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd11;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[11][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[11][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd12;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[12][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[12][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd13;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else if(((addr_count_data[13][50:32] == delay3_write_data_addr[18:0])&&(delay3_write_data_addr!=32'd0)) || ((addr_count_data[13][50:32] == delay1_write_data_addr[18:0])&&(delay1_write_data_addr!=32'd0)))
+					begin
+						change_data = 4'd14;
+						next_din_ready = 1'b0;
+						next_din_addr = 19'd0;
+					end
+					else
+					begin
+						if(delay3_write_data_valid)
+						begin
+							next_din_addr = {7'd0 , delay3_write_data_addr[10:0]};
+							next_din_ready = 1'b1;
+						end
+						else
+						begin
+							next_din_addr = {7'd0 , delay1_write_data_addr[10:0]};
+							next_din_ready = 1'b1;
+						end
+					end
 				end
-				else
+				else	//there's no data in shift memory
 				begin
-					next_din_addr = {7'd0 , delay_data_addr[10:0]};
+					//send read addr
+					if(delay3_write_data_valid)
+					begin
+						next_din_addr = {7'd0 , delay3_write_data_addr[10:0]};
+						next_din_ready = 1'b1;
+						read_vaild_num = 2'd1;
+					end
+					else
+					begin
+						next_din_addr = {7'd0 , delay1_write_data_addr[10:0]};
+						next_din_ready = 1'b1;
+						read_vaild_num = 2'd2;
+					end
 				end
-				if(din_valid && (vaild_count != 8'd0))
+				//state change 
+				if(din_valid && (vaild_count != 8'd0))	
 				begin
 					nextstate_init = WRITE;
 				end
@@ -386,39 +521,19 @@ module r_w_ctrl
 					next_dout_addr = {7'd0 , rmw_addr[10:0]};
 					if(delay_din[215:200] == 16'd0)
 					begin	
-						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (write_data_valid || delay1_write_data_valid))
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd2;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = count_data[31:16] + write_data[63:48];	//byte count
-							write_data_rn = 1'b1;							
-						end
-						else
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd1;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = {44'd0 , count_data[31:16]};		//byte count							
-						end
+						next_dout_data[215:200] = SRAM_ID_0[15:0];		//SRAM_ID
+						{next_dout_data[199:180] , next_dout_data[143:132]} = packet_count_ID_0;	//packet count
+						{next_dout_data[131:108] , next_dout_data[71:36]} = {44'd0 , byte_count_ID_0};		//byte count							
 						next_dout_data[179:144] = 36'd0;
 						next_dout_data[107:72] = 36'd0;
 						next_dout_data[35:0] = 36'd0;
 						mod_finish = 1;
 					end
-					else if(delay_din[215:200] == count_data[15:0])
+					else if(delay_din[215:200] == SRAM_ID_0[15:0])
 					begin	
-						if((write_data[47:32] == delay_din[215:200] || delay1_write_data[47:32] == delay_din[215:200]) && (write_data_valid || delay1_write_data_valid))
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16] + write_data[63:48];
-							write_data_rn = 1'b1;
-						end
-						else
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 1'b1;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16];
-						end	
+						next_dout_data[215:200] = SRAM_ID_0[15:0];		//SRAM_ID
+						{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + packet_count_ID_0;	//packet count
+						{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + byte_count_ID_0;
 						next_dout_data[179:144] = delay_din[179:144];
 						next_dout_data[107:72] = delay_din[107:72];
 						next_dout_data[35:0] = delay_din[35:0];
@@ -426,39 +541,19 @@ module r_w_ctrl
 					end
 					else if(delay_din[179:164] == 16'd0)
 					begin
-						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (write_data_valid || delay1_write_data_valid))
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd2;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = count_data[31:16] + write_data[63:48];	//byte count	
-							write_data_rn = 1'b1;						
-						end
-						else
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd1;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = {44'd0 , count_data[31:16]};	//byte count							
-						end
+						next_dout_data[179:164] = SRAM_ID_1[15:0];		//SRAM_ID
+						{next_dout_data[163:144] , next_dout_data[107:96]} = packet_count_ID_1;	//packet count
+						{next_dout_data[85:72] , next_dout_data[35:0]} = {44'd0 , byte_count_ID_1};	//byte count							
 						next_dout_data[215:180] = delay_din[215:180];
 						next_dout_data[143:108] = delay_din[143:108];
 						next_dout_data[71:36] = delay_din[71:36];
 						mod_finish = 1;
 					end
-					else if(delay_din[179:164] == count_data[15:0])
+					else if(delay_din[179:164] == SRAM_ID_1[15:0])
 					begin	
-						if((write_data[47:32] == delay_din[179:164] || delay1_write_data[47:32] == delay_din[179:164]) && (write_data_valid || delay1_write_data_valid))
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 2'd2;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16] + write_data[63:48];
-							write_data_rn = 1'b1;
-						end
-						else
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 1'b1;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16];							
-						end
+						next_dout_data[179:164] = SRAM_ID_1[15:0];		//SRAM_ID
+						{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + packet_count_ID_1;	//packet count
+						{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + byte_count_ID_1;							
 						next_dout_data[215:180] = delay_din[215:180];
 						next_dout_data[143:108] = delay_din[143:108];
 						next_dout_data[71:36] = delay_din[71:36];
@@ -475,76 +570,36 @@ module r_w_ctrl
 				begin
 					if(delay_din[215:200] == 16'd0 && (~pre_mod_finish))
 					begin	
-						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (delay1_write_data_valid || delay2_write_data_valid))
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd2;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = count_data[31:16] + write_data[63:48];	//byte count	
-							write_data_rn = 1'b1;						
-						end
-						else
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd1;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = {44'd0 , count_data[31:16]};		//byte count							
-						end
+						next_dout_data[215:200] = SRAM_ID_2[15:0];		//SRAM_ID
+						{next_dout_data[199:180] , next_dout_data[143:132]} = packet_count_ID_2;	//packet count
+						{next_dout_data[131:108] , next_dout_data[71:36]} = {44'd0 , byte_count_ID_2};		//byte count							
 						next_dout_data[179:144] = 36'd0;
 						next_dout_data[107:72] = 36'd0;
 						next_dout_data[35:0] = 36'd0;
 					end
-					else if(delay_din[215:200] == count_data[15:0] && (~pre_mod_finish))
+					else if(delay_din[215:200] == SRAM_ID_2[15:0] && (~pre_mod_finish))
 					begin	
-						if((write_data[47:32] == delay_din[215:200] || delay1_write_data[47:32] == delay_din[215:200]) && (delay1_write_data_valid || delay2_write_data_valid))
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16] + write_data[63:48];
-							write_data_rn = 1'b1;
-						end
-						else
-						begin
-							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 1'b1;	//packet count
-							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16];
-						end	
+						next_dout_data[215:200] = SRAM_ID_2[15:0];		//SRAM_ID
+						{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + packet_count_ID_2;	//packet count
+						{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + byte_count_ID_2;
 						next_dout_data[179:144] = delay_din[179:144];
 						next_dout_data[107:72] = delay_din[107:72];
 						next_dout_data[35:0] = delay_din[35:0];	
 					end
 					else if(delay_din[179:164] == 16'd0 && (~pre_mod_finish))
 					begin
-						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (delay1_write_data_valid || delay2_write_data_valid))
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd2;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = count_data[31:16] + write_data[63:48];	//byte count	
-							write_data_rn = 1'b1;						
-						end
-						else
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd1;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = {44'd0 , count_data[31:16]};	//byte count							
-						end
+						next_dout_data[179:164] = SRAM_ID_3[15:0];		//SRAM_ID
+						{next_dout_data[163:144] , next_dout_data[107:96]} = packet_count_ID_3;	//packet count
+						{next_dout_data[85:72] , next_dout_data[35:0]} = {44'd0 , byte_count_ID_3};	//byte count							
 						next_dout_data[215:180] = delay_din[215:180];
 						next_dout_data[143:108] = delay_din[143:108];
 						next_dout_data[71:36] = delay_din[71:36];
 					end
-					else if(delay_din[179:164] == count_data[15:0] && (~pre_mod_finish))
+					else if(delay_din[179:164] == SRAM_ID_3[15:0] && (~pre_mod_finish))
 					begin		
-						if((write_data[47:32] == delay_din[179:164] || delay1_write_data[47:32] == delay_din[179:164]) && (delay1_write_data_valid || delay2_write_data_valid))
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 2'd2;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16] + write_data[63:48];
-							write_data_rn = 1'b1;
-						end
-						else
-						begin
-							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
-							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 1'b1;	//packet count
-							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16];							
-						end
+						next_dout_data[179:164] = SRAM_ID_3[15:0];		//SRAM_ID
+						{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + packet_count_ID_3;	//packet count
+						{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + SRAM_ID_0[31:16] + byte_count_ID_3;					
 						next_dout_data[215:180] = delay_din[215:180];
 						next_dout_data[143:108] = delay_din[143:108];
 						next_dout_data[71:36] = delay_din[71:36];
@@ -567,9 +622,6 @@ module r_w_ctrl
 						nextstate_init = READ_WRITE_WAIT;
 					end
 				end
-				//next_delay_din_ready = 1'b1;
-				//next_delay_din_addr = {7'd0 , rmw_addr[10:0]};
-				//nextstate_init = READ_WRITE_WAIT;
 			end
 			default : 
 			begin
@@ -580,35 +632,3536 @@ module r_w_ctrl
 				next_din_addr = 19'd0;
 			end
 		endcase
-	end		
-	
-	fifo_addr_delay 
-	fifo_addr_delay 
-	(
-		.clk(clk), 				// input clk
-	  	.rst(reset), 				// input rst
-		.din(write_data_addr[18:0]), 		// input [18 : 0] din
-	  	.wr_en(write_data_valid), 		// input wr_en
-	  	.rd_en(count_data_rn|write_data_rn), 	// input rd_en
-	  	.dout(rmw_addr),			// output [18 : 0] dout
-	  	.full(), 				// output full
-	  	.empty(), 				// output empty
-	  	.valid(delay_addr_valid) 		// output valid
-	);
-	
-	count_delay 
-	count_delay 
-	(
-  		.clk(clk), 				// input clk
-  		.rst(reset), 				// input rst
-  		.din(write_data[63:32]), 		// input [31 : 0] din
-  		.wr_en(write_data_valid), 		// input wr_en
-  		.rd_en(count_data_rn|write_data_rn), 	// input rd_en
-  		.dout(count_data), 			// output [31 : 0] dout
-  		.full(), 				// output full
-  		.empty() ,				// output empty
-		.valid(count_delay_valid) 		// output valid
-	);
-
+	end
+	////////////////////////////////////////////////////////////////////////////////////////////////////
+	//shift memory		
+	//save data in DFFs
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			data_bit_array 			<= 14'd0;
+			rmw_addr 					<= 19'd0;
+			addr_count_data[0] 			<= 55'd0;
+			addr_count_data[1] 			<= 55'd0;
+			addr_count_data[2] 			<= 55'd0;
+			addr_count_data[3] 			<= 55'd0;
+			addr_count_data[4] 			<= 55'd0;
+			addr_count_data[5] 			<= 55'd0;
+			addr_count_data[6] 			<= 55'd0;
+			addr_count_data[7] 			<= 55'd0;
+			addr_count_data[8] 			<= 55'd0;
+			addr_count_data[9] 			<= 55'd0;
+			addr_count_data[10] 		<= 55'd0;
+			addr_count_data[11] 		<= 55'd0;
+			addr_count_data[12] 		<= 55'd0;
+			addr_count_data[13] 		<= 55'd0;
+			packet_count_ID_0 			<= 4'd0;
+			byte_count_ID_0				<= 16'd0;
+			SRAM_ID_0					<= 16'd0;
+			addr_count_data_ID_1[0] 	<= 36'd0;
+			addr_count_data_ID_1[1] 	<= 36'd0;
+			addr_count_data_ID_1[2] 	<= 36'd0;
+			addr_count_data_ID_1[3] 	<= 36'd0;
+			addr_count_data_ID_1[4] 	<= 36'd0;
+			addr_count_data_ID_1[5] 	<= 36'd0;
+			addr_count_data_ID_1[6] 	<= 36'd0;
+			addr_count_data_ID_1[7] 	<= 36'd0;
+			addr_count_data_ID_1[8] 	<= 36'd0;
+			addr_count_data_ID_1[9] 	<= 36'd0;
+			addr_count_data_ID_1[10] 	<= 36'd0;
+			addr_count_data_ID_1[11] 	<= 36'd0;
+			addr_count_data_ID_1[12] 	<= 36'd0;
+			packet_count_ID_1 			<= 4'd0;
+			byte_count_ID_1				<= 16'd0;
+			SRAM_ID_1					<= 16'd0;
+			addr_count_data_ID_2[0] 	<= 36'd0;
+			addr_count_data_ID_2[1] 	<= 36'd0;
+			addr_count_data_ID_2[2] 	<= 36'd0;
+			addr_count_data_ID_2[3] 	<= 36'd0;
+			addr_count_data_ID_2[4] 	<= 36'd0;
+			addr_count_data_ID_2[5] 	<= 36'd0;
+			addr_count_data_ID_2[6] 	<= 36'd0;
+			addr_count_data_ID_2[7] 	<= 36'd0;
+			addr_count_data_ID_2[8] 	<= 36'd0;
+			addr_count_data_ID_2[9] 	<= 36'd0;
+			addr_count_data_ID_2[10] 	<= 36'd0;
+			addr_count_data_ID_2[11] 	<= 36'd0;
+			addr_count_data_ID_2[12] 	<= 36'd0;
+			packet_count_ID_2 			<= 4'd0;
+			byte_count_ID_2				<= 16'd0;
+			SRAM_ID_2					<= 16'd0;
+			addr_count_data_ID_3[0] 	<= 36'd0;
+			addr_count_data_ID_3[1] 	<= 36'd0;
+			addr_count_data_ID_3[2] 	<= 36'd0;
+			addr_count_data_ID_3[3] 	<= 36'd0;
+			addr_count_data_ID_3[4] 	<= 36'd0;
+			addr_count_data_ID_3[5] 	<= 36'd0;
+			addr_count_data_ID_3[6] 	<= 36'd0;
+			addr_count_data_ID_3[7] 	<= 36'd0;
+			addr_count_data_ID_3[8] 	<= 36'd0;
+			addr_count_data_ID_3[9] 	<= 36'd0;
+			addr_count_data_ID_3[10] 	<= 36'd0;
+			addr_count_data_ID_3[11] 	<= 36'd0;
+			packet_count_ID_3 			<= 4'd0;
+			byte_count_ID_3				<= 16'd0;
+			SRAM_ID_3					<= 16'd0;
+		end
+		else
+		begin
+			if(din_ready&((state_init == READ_WRITE_WAIT)||(state_init == READ)||(state_init == WRITE)))
+			begin
+				addr_count_data[0] 		<= {4'd1 , delay2_write_data_addr[18:0] , delay2_write_data[63:32]};	//{packet_count --> 4bits , addr --> 19bits , data_byte --> 16bits , SRAM_ID --> 16bits}
+				addr_count_data[1] 		<= addr_count_data[0];
+				addr_count_data[2] 		<= addr_count_data[1];
+				addr_count_data[3] 		<= addr_count_data[2];
+				addr_count_data[4] 		<= addr_count_data[3];
+				addr_count_data[5] 		<= addr_count_data[4];
+				addr_count_data[6] 		<= addr_count_data[5];
+				addr_count_data[7] 		<= addr_count_data[6];
+				addr_count_data[8] 		<= addr_count_data[7];
+				addr_count_data[9] 		<= addr_count_data[8];
+				addr_count_data[10] 	<= addr_count_data[9];
+				addr_count_data[11] 	<= addr_count_data[10];
+				addr_count_data[12] 	<= addr_count_data[11];
+				addr_count_data[13] 	<= addr_count_data[12];
+				{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} <= addr_count_data[13];
+				data_bit_array 			<= ((data_bit_array << 1)|1'b1); 
+			end
+			//when in READ state --> compre the packet_in addr and the addr in DFFs 
+			else if(change_data == 4'd1)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[0][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1][15:0] 	<= addr_count_data[0][15:0];
+					addr_count_data[1][31:16] 	<= addr_count_data[0][31:16] + delay1_write_data[63:48];
+					addr_count_data[1][50:32] 	<= addr_count_data[0][50:32];
+					addr_count_data[1][54:51] 	<= addr_count_data[0][54:51] + 1'b1;
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[0][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1][15:0] 	<= addr_count_data[0][15:0];
+					addr_count_data[1][31:16] 	<= addr_count_data[0][31:16] + delay3_write_data[63:48];
+					addr_count_data[1][50:32] 	<= addr_count_data[0][50:32];
+					addr_count_data[1][54:51] 	<= addr_count_data[0][54:51] + 1'b1;
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else														//if SRAM_ID isn't match first DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))		//data in ID_1 ~ ID_3 --> don't have to save addr
+					begin
+						addr_count_data_ID_1[0][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_1[0][31:16] 	<= delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[1][35:32] 	<= 4'b0001;
+						addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0][15:0] 	<= delay3_write_data[47:32];	//byte_count
+						addr_count_data_ID_1[0][31:16] 	<= delay3_write_data[63:48];	//SRAM_ID
+						addr_count_data_ID_1[1][35:32] 	<= 4'b0001;
+						addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+				end
+			end
+			else if(change_data == 4'd2)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[1][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2][15:0] 	<= addr_count_data[1][15:0];
+					addr_count_data[2][31:16] 	<= addr_count_data[1][31:16] + delay1_write_data[63:48];
+					addr_count_data[2][50:32] 	<= addr_count_data[1][50:32];
+					addr_count_data[2][54:51] 	<= addr_count_data[1][54:51] + 1'b1;
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[1][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 55'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2][15:0] 	<= addr_count_data[1][15:0];
+					addr_count_data[2][31:16] 	<= addr_count_data[1][31:16] + delay3_write_data[63:48];
+					addr_count_data[2][50:32] 	<= addr_count_data[1][50:32];
+					addr_count_data[2][54:51] 	<= addr_count_data[1][54:51] + 1'b1;
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[0][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 	<= 36'd0;
+						addr_count_data_ID_1[1][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_1[1][31:16] 	<= addr_count_data_ID_1[0][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[1][35:32] 	<= addr_count_data_ID_1[0][35:32] + 1'b1;
+						addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 	<= 36'd0;
+						addr_count_data_ID_1[1][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_1[1][31:16] 	<= addr_count_data_ID_1[0][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[1][35:32] 	<= addr_count_data_ID_1[0][35:32] + 1'b1;
+						addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+				end
+				else if((addr_count_data_ID_1[0][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1][15:0] 	<= addr_count_data_ID_1[0][15:0];								//SRAM_ID
+					addr_count_data_ID_1[1][31:16] 	<= addr_count_data_ID_1[0][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[1][35:32] 	<= addr_count_data_ID_1[0][35:32] + 1'b1;
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[0][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1][15:0] 	<= addr_count_data_ID_1[0][15:0];								//SRAM_ID
+					addr_count_data_ID_1[1][31:16] 	<= addr_count_data_ID_1[0][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[1][35:32] 	<= addr_count_data_ID_1[0][35:32] + 1'b1;
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[0][31:16] 	<= delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[1][35:32] 	<= 4'b0001;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[0][31:16] 	<= delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[1][35:32] 	<= 4'b0001;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+			end
+			else if(change_data == 4'd3)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[2][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3][15:0] 	<= addr_count_data[2][15:0];
+					addr_count_data[3][31:16] 	<= addr_count_data[2][31:16] + delay1_write_data[63:48];
+					addr_count_data[3][50:32] 	<= addr_count_data[2][50:32];
+					addr_count_data[3][54:51] 	<= addr_count_data[2][54:51] + 1'b1;
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[2][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 55'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3][15:0] 	<= addr_count_data[2][15:0];
+					addr_count_data[3][31:16] 	<= addr_count_data[2][31:16] + delay3_write_data[63:48];
+					addr_count_data[3][50:32] 	<= addr_count_data[2][50:32];
+					addr_count_data[3][54:51] 	<= addr_count_data[2][54:51] + 1'b1;
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[1][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[2][31:16] 	<= addr_count_data_ID_1[1][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[2][35:32] 	<= addr_count_data_ID_1[1][35:32] + 1'b1;
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[2][31:16] 	<= addr_count_data_ID_1[1][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[2][35:32] 	<= addr_count_data_ID_1[1][35:32] + 1'b1;
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+				end
+				else if((addr_count_data_ID_1[1][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2][15:0] 	<= addr_count_data_ID_1[1][15:0];								//SRAM_ID
+					addr_count_data_ID_1[2][31:16] 	<= addr_count_data_ID_1[1][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[2][35:32] 	<= addr_count_data_ID_1[1][35:32] + 1'b1;
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[1][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2][15:0] 	<= addr_count_data_ID_1[1][15:0];								//SRAM_ID
+					addr_count_data_ID_1[2][31:16] 	<= addr_count_data_ID_1[1][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[2][35:32] 	<= addr_count_data_ID_1[1][35:32] + 1'b1;
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[0][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[1][31:16] 	<= addr_count_data_ID_2[0][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[1][35:32] 	<= addr_count_data_ID_2[0][35:32] + 1'b1;
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[1][31:16] 	<= addr_count_data_ID_2[0][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[1][35:32] 	<= addr_count_data_ID_2[0][35:32] + 1'b1;
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[0][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;					
+					addr_count_data_ID_2[1][15:0] 	<= addr_count_data_ID_2[0][15:0];								//SRAM_ID
+					addr_count_data_ID_2[1][31:16] 	<= addr_count_data_ID_2[0][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[1][35:32] 	<= addr_count_data_ID_2[0][35:32] + 1'b1;
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[0][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;					
+					addr_count_data_ID_2[1][15:0] 	<= addr_count_data_ID_2[0][15:0];								//SRAM_ID
+					addr_count_data_ID_2[1][31:16] 	<= addr_count_data_ID_2[0][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[1][35:32] 	<= addr_count_data_ID_2[0][35:32] + 1'b1;
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[0][31:16] 	<= delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[0][35:32] 	<= 4'b0001;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[0][31:16] 	<= delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[0][35:32] 	<= 4'b0001;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+			end
+			else if(change_data == 4'd4)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[3][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4][15:0] 	<= addr_count_data[3][15:0];
+					addr_count_data[4][31:16] 	<= addr_count_data[3][31:16] + delay1_write_data[63:48];
+					addr_count_data[4][50:32] 	<= addr_count_data[3][50:32];
+					addr_count_data[4][54:51] 	<= addr_count_data[3][54:51] + 1'b1;
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[3][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4][15:0] 	<= addr_count_data[3][15:0];
+					addr_count_data[4][31:16] 	<= addr_count_data[3][31:16] + delay3_write_data[63:48];
+					addr_count_data[4][50:32] 	<= addr_count_data[3][50:32];
+					addr_count_data[4][54:51] 	<= addr_count_data[3][54:51] + 1'b1;
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[2][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[3][31:16] 	<= addr_count_data_ID_1[2][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[3][35:32] 	<= addr_count_data_ID_1[2][35:32] + 1'b1;						
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[3][31:16] 	<= addr_count_data_ID_1[2][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[3][35:32] 	<= addr_count_data_ID_1[2][35:32] + 1'b1;						
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+				end
+				else if((addr_count_data_ID_1[2][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3][15:0] 	<= addr_count_data_ID_1[2][15:0];								//SRAM_ID
+					addr_count_data_ID_1[3][31:16] 	<= addr_count_data_ID_1[2][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[3][35:32] 	<= addr_count_data_ID_1[2][35:32] + 1'b1;					
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[2][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3][15:0] 	<= addr_count_data_ID_1[2][15:0];								//SRAM_ID
+					addr_count_data_ID_1[3][31:16] 	<= addr_count_data_ID_1[2][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[3][35:32] 	<= addr_count_data_ID_1[2][35:32] + 1'b1;					
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[1][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[2][31:16] 	<= addr_count_data_ID_2[1][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[2][35:32] 	<= addr_count_data_ID_2[1][35:32] + 1'b1;
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[2][31:16] 	<= addr_count_data_ID_2[1][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[2][35:32] 	<= addr_count_data_ID_2[1][35:32] + 1'b1;
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[1][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2][15:0] 	<= addr_count_data_ID_2[1][15:0];								//SRAM_ID
+					addr_count_data_ID_2[2][31:16] 	<= addr_count_data_ID_2[1][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[2][35:32] 	<= addr_count_data_ID_2[1][35:32] + 1'b1;				
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[1][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2][15:0] 	<= addr_count_data_ID_2[1][15:0];								//SRAM_ID
+					addr_count_data_ID_2[2][31:16] 	<= addr_count_data_ID_2[1][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[2][35:32] 	<= addr_count_data_ID_2[1][35:32] + 1'b1;				
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[0][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[1][31:16] 	<= addr_count_data_ID_3[0][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[1][35:32] 	<= addr_count_data_ID_3[0][35:32] + 1'b1;			
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[1][31:16] 	<= addr_count_data_ID_3[0][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[1][35:32] 	<= addr_count_data_ID_3[0][35:32] + 1'b1;			
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[0][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1][15:0] 	<= addr_count_data_ID_3[0][15:0];								//SRAM_ID
+					addr_count_data_ID_3[1][31:16] 	<= addr_count_data_ID_3[0][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[1][35:32] 	<= addr_count_data_ID_3[0][35:32] + 1'b1;
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];					
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[0][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1][15:0] 	<= addr_count_data_ID_3[0][15:0];								//SRAM_ID
+					addr_count_data_ID_3[1][31:16] 	<= addr_count_data_ID_3[0][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[1][35:32] 	<= addr_count_data_ID_3[0][35:32] + 1'b1;
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];					
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd5)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[4][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5][15:0] 	<= addr_count_data[4][15:0];
+					addr_count_data[5][31:16] 	<= addr_count_data[4][31:16] + delay1_write_data[63:48];
+					addr_count_data[5][50:32] 	<= addr_count_data[4][50:32];
+					addr_count_data[5][54:51] 	<= addr_count_data[4][54:51] + 1'b1;
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[4][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5][15:0] 	<= addr_count_data[4][15:0];
+					addr_count_data[5][31:16] 	<= addr_count_data[4][31:16] + delay3_write_data[63:48];
+					addr_count_data[5][50:32] 	<= addr_count_data[4][50:32];
+					addr_count_data[5][54:51] 	<= addr_count_data[4][54:51] + 1'b1;
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[3][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[4][31:16] 	<= addr_count_data_ID_1[3][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[4][35:32] 	<= addr_count_data_ID_1[3][35:32] + 1'b1;												
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[4][31:16] 	<= addr_count_data_ID_1[3][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[4][35:32] 	<= addr_count_data_ID_1[3][35:32] + 1'b1;												
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+				end
+				else if((addr_count_data_ID_1[3][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4][15:0] 	<= addr_count_data_ID_1[3][15:0];								//SRAM_ID
+					addr_count_data_ID_1[4][31:16] 	<= addr_count_data_ID_1[3][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[4][35:32] 	<= addr_count_data_ID_1[3][35:32] + 1'b1;										
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[3][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4][15:0] 	<= addr_count_data_ID_1[3][15:0];								//SRAM_ID
+					addr_count_data_ID_1[4][31:16] 	<= addr_count_data_ID_1[3][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[4][35:32] 	<= addr_count_data_ID_1[3][35:32] + 1'b1;										
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[2][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[3][31:16] 	<= addr_count_data_ID_2[2][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[3][35:32] 	<= addr_count_data_ID_2[2][35:32] + 1'b1;
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[3][31:16] 	<= addr_count_data_ID_2[2][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[3][35:32] 	<= addr_count_data_ID_2[2][35:32] + 1'b1;
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[2][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3][15:0] 	<= addr_count_data_ID_2[2][15:0];	//SRAM_ID
+					addr_count_data_ID_2[3][31:16] 	<= addr_count_data_ID_2[2][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[3][35:32] 	<= addr_count_data_ID_2[2][35:32] + 1'b1;
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[2][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3][15:0] 	<= addr_count_data_ID_2[2][15:0];	//SRAM_ID
+					addr_count_data_ID_2[3][31:16] 	<= addr_count_data_ID_2[2][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[3][35:32] 	<= addr_count_data_ID_2[2][35:32] + 1'b1;
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[1][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[2][31:16] 	<= addr_count_data_ID_3[1][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[2][35:32] 	<= addr_count_data_ID_3[1][35:32] + 1'b1;			
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[2][31:16] 	<= addr_count_data_ID_3[1][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[2][35:32] 	<= addr_count_data_ID_3[1][35:32] + 1'b1;			
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[1][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];						
+					addr_count_data_ID_3[2][15:0] 	<= addr_count_data_ID_3[1][15:0];								//SRAM_ID
+					addr_count_data_ID_3[2][31:16] 	<= addr_count_data_ID_3[1][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[2][35:32] 	<= addr_count_data_ID_3[1][35:32] + 1'b1;	
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[1][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];						
+					addr_count_data_ID_3[2][15:0] 	<= addr_count_data_ID_3[1][15:0];								//SRAM_ID
+					addr_count_data_ID_3[2][31:16] 	<= addr_count_data_ID_3[1][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[2][35:32] 	<= addr_count_data_ID_3[1][35:32] + 1'b1;	
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd6)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[5][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6][15:0] 	<= addr_count_data[5][15:0];
+					addr_count_data[6][31:16] 	<= addr_count_data[5][31:16] + delay1_write_data[63:48];
+					addr_count_data[6][50:32] 	<= addr_count_data[5][50:32];
+					addr_count_data[6][54:51] 	<= addr_count_data[5][54:51] + 1'b1;					
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[5][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6][15:0] 	<= addr_count_data[5][15:0];
+					addr_count_data[6][31:16] 	<= addr_count_data[5][31:16] + delay3_write_data[63:48];
+					addr_count_data[6][50:32] 	<= addr_count_data[5][50:32];
+					addr_count_data[6][54:51] 	<= addr_count_data[5][54:51] + 1'b1;					
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[4][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[5][31:16] 	<= addr_count_data_ID_1[4][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[5][35:32] 	<= addr_count_data_ID_1[4][35:32] + 1'b1;																		
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[5][31:16] 	<= addr_count_data_ID_1[4][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[5][35:32] 	<= addr_count_data_ID_1[4][35:32] + 1'b1;																		
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+				end
+				else if((addr_count_data_ID_1[4][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5][15:0] 	<= addr_count_data_ID_1[4][15:0];								//SRAM_ID
+					addr_count_data_ID_1[5][31:16] 	<= addr_count_data_ID_1[4][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[5][35:32] 	<= addr_count_data_ID_1[4][35:32] + 1'b1;															
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[4][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5][15:0] 	<= addr_count_data_ID_1[4][15:0];								//SRAM_ID
+					addr_count_data_ID_1[5][31:16] 	<= addr_count_data_ID_1[4][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[5][35:32] 	<= addr_count_data_ID_1[4][35:32] + 1'b1;															
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[3][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[4][31:16] 	<= addr_count_data_ID_2[3][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[4][35:32] 	<= addr_count_data_ID_2[3][35:32] + 1'b1;						
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[4][31:16] 	<= addr_count_data_ID_2[3][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[4][35:32] 	<= addr_count_data_ID_2[3][35:32] + 1'b1;						
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[3][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4][15:0] 	<= addr_count_data_ID_2[3][15:0];	//SRAM_ID
+					addr_count_data_ID_2[4][31:16] 	<= addr_count_data_ID_2[3][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[4][35:32] 	<= addr_count_data_ID_2[3][35:32] + 1'b1;				
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[2][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4][15:0] 	<= addr_count_data_ID_2[3][15:0];	//SRAM_ID
+					addr_count_data_ID_2[4][31:16] 	<= addr_count_data_ID_2[3][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[4][35:32] 	<= addr_count_data_ID_2[3][35:32] + 1'b1;				
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[2][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[3][31:16] 	<= addr_count_data_ID_3[2][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[3][35:32] 	<= addr_count_data_ID_3[2][35:32] + 1'b1;									
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[3][31:16] 	<= addr_count_data_ID_3[2][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[3][35:32] 	<= addr_count_data_ID_3[2][35:32] + 1'b1;									
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[2][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 	<= 36'd0;
+					addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3][15:0] 	<= addr_count_data_ID_3[2][15:0];								//SRAM_ID
+					addr_count_data_ID_3[3][31:16] 	<= addr_count_data_ID_3[2][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[3][35:32] 	<= addr_count_data_ID_3[2][35:32] + 1'b1;														
+					addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[2][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 	<= 36'd0;
+					addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3][15:0] 	<= addr_count_data_ID_3[2][15:0];								//SRAM_ID
+					addr_count_data_ID_3[3][31:16] 	<= addr_count_data_ID_3[2][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[3][35:32] 	<= addr_count_data_ID_3[2][35:32] + 1'b1;														
+					addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd7)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[6][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7][15:0] 	<= addr_count_data[6][15:0];
+					addr_count_data[7][31:16] 	<= addr_count_data[6][31:16] + delay1_write_data[63:48];
+					addr_count_data[7][50:32] 	<= addr_count_data[6][50:32];
+					addr_count_data[7][54:51] 	<= addr_count_data[6][54:51] + 1'b1;										
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[6][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7][15:0] 	<= addr_count_data[6][15:0];
+					addr_count_data[7][31:16] 	<= addr_count_data[6][31:16] + delay3_write_data[63:48];
+					addr_count_data[7][50:32] 	<= addr_count_data[6][50:32];
+					addr_count_data[7][54:51] 	<= addr_count_data[6][54:51] + 1'b1;										
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];		
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[5][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[6][31:16] 	<= addr_count_data_ID_1[5][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[6][35:32] 	<= addr_count_data_ID_1[5][35:32] + 1'b1;																								
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[6][31:16] 	<= addr_count_data_ID_1[5][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[6][35:32] 	<= addr_count_data_ID_1[5][35:32] + 1'b1;																								
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];		
+					end
+				end
+				else if((addr_count_data_ID_1[5][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6][15:0] 	<= addr_count_data_ID_1[5][15:0];								//SRAM_ID
+					addr_count_data_ID_1[6][31:16] 	<= addr_count_data_ID_1[5][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[6][35:32] 	<= addr_count_data_ID_1[5][35:32] + 1'b1;																			
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[5][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6][15:0] 	<= addr_count_data_ID_1[5][15:0];								//SRAM_ID
+					addr_count_data_ID_1[6][31:16] 	<= addr_count_data_ID_1[5][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[6][35:32] 	<= addr_count_data_ID_1[5][35:32] + 1'b1;																			
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[4][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[5][31:16] 	<= addr_count_data_ID_2[4][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[5][35:32] 	<= addr_count_data_ID_2[4][35:32] + 1'b1;												
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[5][31:16] 	<= addr_count_data_ID_2[4][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[5][35:32] 	<= addr_count_data_ID_2[4][35:32] + 1'b1;												
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[4][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5][15:0] 	<= addr_count_data_ID_2[4][15:0];	//SRAM_ID
+					addr_count_data_ID_2[5][31:16] 	<= addr_count_data_ID_2[4][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[5][35:32] 	<= addr_count_data_ID_2[4][35:32] + 1'b1;									
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[2][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5][15:0] 	<= addr_count_data_ID_2[4][15:0];	//SRAM_ID
+					addr_count_data_ID_2[5][31:16] 	<= addr_count_data_ID_2[4][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[5][35:32] 	<= addr_count_data_ID_2[4][35:32] + 1'b1;									
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[3][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[4][31:16] 	<= addr_count_data_ID_3[3][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[4][35:32] 	<= addr_count_data_ID_3[3][35:32] + 1'b1;															
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[4][31:16] 	<= addr_count_data_ID_3[3][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[4][35:32] 	<= addr_count_data_ID_3[3][35:32] + 1'b1;															
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[3][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4][15:0] 	<= addr_count_data_ID_3[3][15:0];								//SRAM_ID
+					addr_count_data_ID_3[4][31:16] 	<= addr_count_data_ID_3[3][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[4][35:32] 	<= addr_count_data_ID_3[3][35:32] + 1'b1;																			
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[3][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4][15:0] 	<= addr_count_data_ID_3[3][15:0];								//SRAM_ID
+					addr_count_data_ID_3[4][31:16] 	<= addr_count_data_ID_3[3][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[4][35:32] 	<= addr_count_data_ID_3[3][35:32] + 1'b1;																			
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd8)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[7][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8][15:0] 	<= addr_count_data[7][15:0];
+					addr_count_data[8][31:16] 	<= addr_count_data[7][31:16] + delay1_write_data[63:48];
+					addr_count_data[8][50:32] 	<= addr_count_data[7][50:32];
+					addr_count_data[8][54:51] 	<= addr_count_data[7][54:51] + 1'b1;															
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[7][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8][15:0] 	<= addr_count_data[7][15:0];
+					addr_count_data[8][31:16] 	<= addr_count_data[7][31:16] + delay3_write_data[63:48];
+					addr_count_data[8][50:32] 	<= addr_count_data[7][50:32];
+					addr_count_data[8][54:51] 	<= addr_count_data[7][54:51] + 1'b1;															
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];		
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[6][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[7][31:16] 	<= addr_count_data_ID_1[6][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[7][35:32] 	<= addr_count_data_ID_1[6][35:32] + 1'b1;																														
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[7][31:16] 	<= addr_count_data_ID_1[6][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[7][35:32] 	<= addr_count_data_ID_1[6][35:32] + 1'b1;																														
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];		
+					end
+				end
+				else if((addr_count_data_ID_1[6][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7][15:0] 	<= addr_count_data_ID_1[6][15:0];								//SRAM_ID
+					addr_count_data_ID_1[7][31:16] 	<= addr_count_data_ID_1[6][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[7][35:32] 	<= addr_count_data_ID_1[6][35:32] + 1'b1;																								
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[6][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7][15:0] 	<= addr_count_data_ID_1[6][15:0];								//SRAM_ID
+					addr_count_data_ID_1[7][31:16] 	<= addr_count_data_ID_1[6][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[7][35:32] 	<= addr_count_data_ID_1[6][35:32] + 1'b1;																								
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[5][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[6][31:16] 	<= addr_count_data_ID_2[5][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[6][35:32] 	<= addr_count_data_ID_2[5][35:32] + 1'b1;																		
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[6][31:16] 	<= addr_count_data_ID_2[5][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[6][35:32] 	<= addr_count_data_ID_2[5][35:32] + 1'b1;																		
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[5][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6][15:0] 	<= addr_count_data_ID_2[5][15:0];	//SRAM_ID
+					addr_count_data_ID_2[6][31:16] 	<= addr_count_data_ID_2[5][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[6][35:32] 	<= addr_count_data_ID_2[5][35:32] + 1'b1;														
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[5][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6][15:0] 	<= addr_count_data_ID_2[5][15:0];	//SRAM_ID
+					addr_count_data_ID_2[6][31:16] 	<= addr_count_data_ID_2[5][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[6][35:32] 	<= addr_count_data_ID_2[5][35:32] + 1'b1;														
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[4][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[5][31:16] 	<= addr_count_data_ID_3[4][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[5][35:32] 	<= addr_count_data_ID_3[4][35:32] + 1'b1;																					
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[5][31:16] 	<= addr_count_data_ID_3[4][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[5][35:32] 	<= addr_count_data_ID_3[4][35:32] + 1'b1;																					
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[4][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5][15:0] 	<= addr_count_data_ID_3[4][15:0];								//SRAM_ID
+					addr_count_data_ID_3[5][31:16] 	<= addr_count_data_ID_3[4][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[5][35:32] 	<= addr_count_data_ID_3[4][35:32] + 1'b1;																								
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[4][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5][15:0] 	<= addr_count_data_ID_3[4][15:0];								//SRAM_ID
+					addr_count_data_ID_3[5][31:16] 	<= addr_count_data_ID_3[4][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[5][35:32] 	<= addr_count_data_ID_3[4][35:32] + 1'b1;																								
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd9)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[8][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9][15:0] 	<= addr_count_data[8][15:0];
+					addr_count_data[9][31:16] 	<= addr_count_data[8][31:16] + delay1_write_data[63:48];
+					addr_count_data[9][50:32] 	<= addr_count_data[8][50:32];
+					addr_count_data[9][54:51] 	<= addr_count_data[8][54:51] + 1'b1;																				
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[8][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9][15:0] 	<= addr_count_data[8][15:0];
+					addr_count_data[9][31:16] 	<= addr_count_data[8][31:16] + delay3_write_data[63:48];
+					addr_count_data[9][50:32] 	<= addr_count_data[8][50:32];
+					addr_count_data[9][54:51] 	<= addr_count_data[8][54:51] + 1'b1;																				
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];		
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[7][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[8][31:16] 	<= addr_count_data_ID_1[7][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[8][35:32] 	<= addr_count_data_ID_1[7][35:32] + 1'b1;						
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[8][31:16] 	<= addr_count_data_ID_1[7][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[8][35:32] 	<= addr_count_data_ID_1[7][35:32] + 1'b1;						
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];		
+					end
+				end
+				else if((addr_count_data_ID_1[7][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8][15:0] 	<= addr_count_data_ID_1[7][15:0];								//SRAM_ID
+					addr_count_data_ID_1[8][31:16] 	<= addr_count_data_ID_1[7][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[8][35:32] 	<= addr_count_data_ID_1[7][35:32] + 1'b1;					
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[7][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8][15:0] 	<= addr_count_data_ID_1[7][15:0];								//SRAM_ID
+					addr_count_data_ID_1[8][31:16] 	<= addr_count_data_ID_1[7][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[8][35:32] 	<= addr_count_data_ID_1[7][35:32] + 1'b1;					
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[6][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[7][31:16] 	<= addr_count_data_ID_2[6][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[7][35:32] 	<= addr_count_data_ID_2[6][35:32] + 1'b1;						
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[7][31:16] 	<= addr_count_data_ID_2[6][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[7][35:32] 	<= addr_count_data_ID_2[6][35:32] + 1'b1;						
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[6][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7][15:0] 	<= addr_count_data_ID_2[6][15:0];	//SRAM_ID
+					addr_count_data_ID_2[7][31:16] 	<= addr_count_data_ID_2[6][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[7][35:32] 	<= addr_count_data_ID_2[6][35:32] + 1'b1;					
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[6][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7][15:0] 	<= addr_count_data_ID_2[6][15:0];	//SRAM_ID
+					addr_count_data_ID_2[7][31:16] 	<= addr_count_data_ID_2[6][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[7][35:32] 	<= addr_count_data_ID_2[6][35:32] + 1'b1;					
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[5][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[6][31:16] 	<= addr_count_data_ID_3[5][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[6][35:32] 	<= addr_count_data_ID_3[5][35:32] + 1'b1;																											
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[6][31:16] 	<= addr_count_data_ID_3[5][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[6][35:32] 	<= addr_count_data_ID_3[5][35:32] + 1'b1;																											
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[5][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6][15:0] 	<= addr_count_data_ID_3[5][15:0];								//SRAM_ID
+					addr_count_data_ID_3[6][31:16] 	<= addr_count_data_ID_3[5][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[6][35:32] 	<= addr_count_data_ID_3[5][35:32] + 1'b1;																												
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[5][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6][15:0] 	<= addr_count_data_ID_3[5][15:0];								//SRAM_ID
+					addr_count_data_ID_3[6][31:16] 	<= addr_count_data_ID_3[5][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[6][35:32] 	<= addr_count_data_ID_3[5][35:32] + 1'b1;																												
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd10)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[9][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 		<= addr_count_data[8];
+					addr_count_data[10][15:0] 	<= addr_count_data[9][15:0];
+					addr_count_data[10][31:16] 	<= addr_count_data[9][31:16] + delay1_write_data[63:48];
+					addr_count_data[10][50:32] 	<= addr_count_data[9][50:32];
+					addr_count_data[10][54:51] 	<= addr_count_data[9][54:51] + 1'b1;					
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[9][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 		<= addr_count_data[8];
+					addr_count_data[10][15:0] 	<= addr_count_data[9][15:0];
+					addr_count_data[10][31:16] 	<= addr_count_data[9][31:16] + delay3_write_data[63:48];
+					addr_count_data[10][50:32] 	<= addr_count_data[9][50:32];
+					addr_count_data[10][54:51] 	<= addr_count_data[9][54:51] + 1'b1;					
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];		
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[8][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[9][31:16] 	<= addr_count_data_ID_1[8][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[9][35:32] 	<= addr_count_data_ID_1[8][35:32] + 1'b1;						
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[9][31:16] 	<= addr_count_data_ID_1[8][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[9][35:32] 	<= addr_count_data_ID_1[8][35:32] + 1'b1;						
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];		
+					end
+				end
+				else if((addr_count_data_ID_1[8][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9][15:0] 	<= addr_count_data_ID_1[8][15:0];								//SRAM_ID
+					addr_count_data_ID_1[9][31:16] 	<= addr_count_data_ID_1[8][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[9][35:32] 	<= addr_count_data_ID_1[8][35:32] + 1'b1;
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[8][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9][15:0] 	<= addr_count_data_ID_1[8][15:0];								//SRAM_ID
+					addr_count_data_ID_1[9][31:16] 	<= addr_count_data_ID_1[8][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[9][35:32] 	<= addr_count_data_ID_1[8][35:32] + 1'b1;
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[7][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[8][31:16] 	<= addr_count_data_ID_2[7][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[8][35:32] 	<= addr_count_data_ID_2[7][35:32] + 1'b1;
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[8][31:16] 	<= addr_count_data_ID_2[7][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[8][35:32] 	<= addr_count_data_ID_2[7][35:32] + 1'b1;
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[7][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8][15:0] 	<= addr_count_data_ID_2[7][15:0];	//SRAM_ID
+					addr_count_data_ID_2[8][31:16] 	<= addr_count_data_ID_2[7][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[8][35:32] 	<= addr_count_data_ID_2[7][35:32] + 1'b1;					
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[7][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8][15:0] 	<= addr_count_data_ID_2[7][15:0];	//SRAM_ID
+					addr_count_data_ID_2[8][31:16] 	<= addr_count_data_ID_2[7][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[8][35:32] 	<= addr_count_data_ID_2[7][35:32] + 1'b1;					
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[6][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[7][31:16] 	<= addr_count_data_ID_3[6][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[7][35:32] 	<= addr_count_data_ID_3[6][35:32] + 1'b1;
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[7][31:16] 	<= addr_count_data_ID_3[6][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[7][35:32] 	<= addr_count_data_ID_3[6][35:32] + 1'b1;
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[6][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7][15:0] 	<= addr_count_data_ID_3[6][15:0];								//SRAM_ID
+					addr_count_data_ID_3[7][31:16] 	<= addr_count_data_ID_3[6][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[7][35:32] 	<= addr_count_data_ID_3[6][35:32] + 1'b1;
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[6][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7][15:0] 	<= addr_count_data_ID_3[6][15:0];								//SRAM_ID
+					addr_count_data_ID_3[7][31:16] 	<= addr_count_data_ID_3[6][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[7][35:32] 	<= addr_count_data_ID_3[6][35:32] + 1'b1;
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd11)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[10][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11][15:0] 	<= addr_count_data[10][15:0];
+					addr_count_data[11][31:16] 	<= addr_count_data[10][31:16] + delay1_write_data[63:48];
+					addr_count_data[11][50:32] 	<= addr_count_data[10][50:32];
+					addr_count_data[11][54:51] 	<= addr_count_data[10][54:51] + 1'b1;
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[9][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11][15:0] 	<= addr_count_data[10][15:0];
+					addr_count_data[11][31:16] 	<= addr_count_data[10][31:16] + delay3_write_data[63:48];
+					addr_count_data[11][50:32] 	<= addr_count_data[10][50:32];
+					addr_count_data[11][54:51] 	<= addr_count_data[10][54:51] + 1'b1;
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];		
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[9][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[10][31:16] 	<= addr_count_data_ID_1[9][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[10][35:32] 	<= addr_count_data_ID_1[9][35:32] + 1'b1;
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[10][31:16] 	<= addr_count_data_ID_1[9][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[10][35:32] 	<= addr_count_data_ID_1[9][35:32] + 1'b1;
+						addr_count_data_ID_1[11] 		<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];		
+					end
+				end
+				else if((addr_count_data_ID_1[9][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10][15:0] 		<= addr_count_data_ID_1[9][15:0];								//SRAM_ID
+					addr_count_data_ID_1[10][31:16] 	<= addr_count_data_ID_1[9][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[10][35:32] 	<= addr_count_data_ID_1[9][35:32] + 1'b1;
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[9][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10][15:0] 		<= addr_count_data_ID_1[9][15:0];								//SRAM_ID
+					addr_count_data_ID_1[10][31:16] 	<= addr_count_data_ID_1[9][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[10][35:32] 	<= addr_count_data_ID_1[9][35:32] + 1'b1;
+					addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[8][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[9][31:16] 	<= addr_count_data_ID_2[8][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[9][35:32] 	<= addr_count_data_ID_2[8][35:32] + 1'b1;
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[9][31:16] 	<= addr_count_data_ID_2[8][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[9][35:32] 	<= addr_count_data_ID_2[8][35:32] + 1'b1;
+						addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[8][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9][15:0] 	<= addr_count_data_ID_2[8][15:0];	//SRAM_ID
+					addr_count_data_ID_2[9][31:16] 	<= addr_count_data_ID_2[8][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[9][35:32] 	<= addr_count_data_ID_2[8][35:32] + 1'b1;
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[8][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9][15:0] 	<= addr_count_data_ID_2[8][15:0];	//SRAM_ID
+					addr_count_data_ID_2[9][31:16] 	<= addr_count_data_ID_2[8][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[9][35:32] 	<= addr_count_data_ID_2[8][35:32] + 1'b1;
+					addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[7][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[8][31:16] 	<= addr_count_data_ID_3[7][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[8][35:32] 	<= addr_count_data_ID_3[7][35:32] + 1'b1;
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[8][31:16] 	<= addr_count_data_ID_3[7][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[8][35:32] 	<= addr_count_data_ID_3[7][35:32] + 1'b1;
+						addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[7][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8][15:0] 	<= addr_count_data_ID_3[7][15:0];								//SRAM_ID
+					addr_count_data_ID_3[8][31:16] 	<= addr_count_data_ID_3[7][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[8][35:32] 	<= addr_count_data_ID_3[7][35:32] + 1'b1;
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[7][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8][15:0] 	<= addr_count_data_ID_3[7][15:0];								//SRAM_ID
+					addr_count_data_ID_3[8][31:16] 	<= addr_count_data_ID_3[7][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[8][35:32] 	<= addr_count_data_ID_3[7][35:32] + 1'b1;
+					addr_count_data_ID_3[9] 		<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd12)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[11][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12][15:0] 	<= addr_count_data[11][15:0];
+					addr_count_data[12][31:16] 	<= addr_count_data[11][31:16] + delay1_write_data[63:48];
+					addr_count_data[12][50:32] 	<= addr_count_data[11][50:32];
+					addr_count_data[12][54:51] 	<= addr_count_data[11][54:51] + 1'b1;
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[11][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12][15:0] 	<= addr_count_data[11][15:0];
+					addr_count_data[12][31:16] 	<= addr_count_data[11][31:16] + delay3_write_data[63:48];
+					addr_count_data[12][50:32] 	<= addr_count_data[11][50:32];
+					addr_count_data[12][54:51] 	<= addr_count_data[11][54:51] + 1'b1;
+					addr_count_data[13] 		<= addr_count_data[12];
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];		
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[10][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11][15:0] 	<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[11][31:16] 	<= addr_count_data_ID_1[10][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[11][35:32] 	<= addr_count_data_ID_1[10][35:32] + 1'b1;
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 		<= 36'd0;
+						addr_count_data_ID_1[1] 		<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 		<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 		<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 		<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 		<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 		<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 		<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 		<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 		<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 		<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11][15:0] 	<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[11][31:16] 	<= addr_count_data_ID_1[10][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[11][35:32] 	<= addr_count_data_ID_1[10][35:32] + 1'b1;
+						addr_count_data_ID_1[12] 		<= addr_count_data_ID_1[11];
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];		
+					end
+				end
+				else if((addr_count_data_ID_1[10][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11][15:0] 		<= addr_count_data_ID_1[10][15:0];								//SRAM_ID
+					addr_count_data_ID_1[11][31:16] 	<= addr_count_data_ID_1[10][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[11][35:32] 	<= addr_count_data_ID_1[10][35:32] + 1'b1;
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[10][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 	<= 36'd0;
+					addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11][15:0] 		<= addr_count_data_ID_1[10][15:0];								//SRAM_ID
+					addr_count_data_ID_1[11][31:16] 	<= addr_count_data_ID_1[10][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[11][35:32] 	<= addr_count_data_ID_1[10][35:32] + 1'b1;
+					addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[9][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10][15:0] 		<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[10][31:16] 	<= addr_count_data_ID_2[9][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[10][35:32] 	<= addr_count_data_ID_2[9][35:32] + 1'b1;
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 	<= 36'd0;
+						addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10][15:0] 		<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[10][31:16] 	<= addr_count_data_ID_2[9][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[10][35:32] 	<= addr_count_data_ID_2[9][35:32] + 1'b1;
+						addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[9][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10][15:0] 		<= addr_count_data_ID_2[9][15:0];	//SRAM_ID
+					addr_count_data_ID_2[10][31:16] 	<= addr_count_data_ID_2[9][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[10][35:32] 	<= addr_count_data_ID_2[9][35:32] + 1'b1;
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[9][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 	<= 36'd0;
+					addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10][15:0] 		<= addr_count_data_ID_2[9][15:0];	//SRAM_ID
+					addr_count_data_ID_2[10][31:16] 	<= addr_count_data_ID_2[9][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[10][35:32] 	<= addr_count_data_ID_2[9][35:32] + 1'b1;
+					addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[8][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9][15:0] 	<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[9][31:16] 	<= addr_count_data_ID_3[8][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[9][35:32] 	<= addr_count_data_ID_3[8][35:32] + 1'b1;
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 	<= 36'd0;
+						addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9][15:0] 	<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[9][31:16] 	<= addr_count_data_ID_3[8][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[9][35:32] 	<= addr_count_data_ID_3[8][35:32] + 1'b1;
+						addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[8][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9][15:0] 	<= addr_count_data_ID_3[8][15:0];								//SRAM_ID
+					addr_count_data_ID_3[9][31:16] 	<= addr_count_data_ID_3[8][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[9][35:32] 	<= addr_count_data_ID_3[8][35:32] + 1'b1;
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[8][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 		<= 36'd0;
+					addr_count_data_ID_3[1] 		<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 		<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 		<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 		<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 		<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 		<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 		<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 		<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9][15:0] 	<= addr_count_data_ID_3[8][15:0];								//SRAM_ID
+					addr_count_data_ID_3[9][31:16] 	<= addr_count_data_ID_3[8][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[9][35:32] 	<= addr_count_data_ID_3[8][35:32] + 1'b1;
+					addr_count_data_ID_3[10] 		<= addr_count_data_ID_3[9];
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else if(change_data == 4'd13)	//new packet in carry same addr with the data in DFF1
+			begin
+				data_bit_array			<= data_bit_array << 1; //set the bit array left shift one bit
+				//SRAM_ID 0
+				if((addr_count_data[12][15:0]) == delay1_write_data[47:32])		//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13][15:0] 	<= addr_count_data[12][15:0];
+					addr_count_data[13][31:16] 	<= addr_count_data[12][31:16] + delay1_write_data[63:48];
+					addr_count_data[13][50:32] 	<= addr_count_data[12][50:32];
+					addr_count_data[13][54:51] 	<= addr_count_data[12][54:51] + 1'b1;
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];	
+				end
+				else if((addr_count_data[12][15:0]) == delay3_write_data[47:32])	//compare the packet_in ID and the ID in DFFs
+				begin
+					addr_count_data[0] 			<= 51'd0;
+					addr_count_data[1] 			<= addr_count_data[0];
+					addr_count_data[2] 			<= addr_count_data[1];
+					addr_count_data[3] 			<= addr_count_data[2];
+					addr_count_data[4] 			<= addr_count_data[3];
+					addr_count_data[5] 			<= addr_count_data[4];
+					addr_count_data[6] 			<= addr_count_data[5];
+					addr_count_data[7] 			<= addr_count_data[6];
+					addr_count_data[8] 			<= addr_count_data[7];
+					addr_count_data[9] 			<= addr_count_data[8];
+					addr_count_data[10] 		<= addr_count_data[9];
+					addr_count_data[11] 		<= addr_count_data[10];
+					addr_count_data[12] 		<= addr_count_data[11];
+					addr_count_data[13][15:0] 	<= addr_count_data[12][15:0];
+					addr_count_data[13][31:16] 	<= addr_count_data[12][31:16] + delay3_write_data[63:48];
+					addr_count_data[13][50:32] 	<= addr_count_data[12][50:32];
+					addr_count_data[13][54:51] 	<= addr_count_data[12][54:51] + 1'b1;
+					{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];		
+				end
+				//SRAM_ID 1
+				//if SRAM_ID isn't the same in first Dffs
+				else if((addr_count_data_ID_1[11][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_1[0] 			<= 36'd0;
+						addr_count_data_ID_1[1] 			<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 			<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 			<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 			<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 			<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 			<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 			<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 			<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 			<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 			<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 			<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12][15:0] 		<= delay1_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[12][31:16] 	<= addr_count_data_ID_1[11][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[12][35:32] 	<= addr_count_data_ID_1[11][35:32] + 1'b1;
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];	
+					end
+					else
+					begin
+						addr_count_data_ID_1[0] 			<= 36'd0;
+						addr_count_data_ID_1[1] 			<= addr_count_data_ID_1[0];
+						addr_count_data_ID_1[2] 			<= addr_count_data_ID_1[1];
+						addr_count_data_ID_1[3] 			<= addr_count_data_ID_1[2];
+						addr_count_data_ID_1[4] 			<= addr_count_data_ID_1[3];
+						addr_count_data_ID_1[5] 			<= addr_count_data_ID_1[4];
+						addr_count_data_ID_1[6] 			<= addr_count_data_ID_1[5];
+						addr_count_data_ID_1[7] 			<= addr_count_data_ID_1[6];
+						addr_count_data_ID_1[8] 			<= addr_count_data_ID_1[7];
+						addr_count_data_ID_1[9] 			<= addr_count_data_ID_1[8];
+						addr_count_data_ID_1[10] 			<= addr_count_data_ID_1[9];
+						addr_count_data_ID_1[11] 			<= addr_count_data_ID_1[10];
+						addr_count_data_ID_1[12][15:0] 		<= delay3_write_data[47:32];									//SRAM_ID
+						addr_count_data_ID_1[12][31:16] 	<= addr_count_data_ID_1[11][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_1[12][35:32] 	<= addr_count_data_ID_1[11][35:32] + 1'b1;
+						{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];		
+					end
+				end
+				else if((addr_count_data_ID_1[11][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 			<= 36'd0;
+					addr_count_data_ID_1[1] 			<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 			<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 			<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 			<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 			<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 			<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 			<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 			<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 			<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 			<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 			<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12][15:0] 		<= addr_count_data_ID_1[11][15:0];								//SRAM_ID
+					addr_count_data_ID_1[12][31:16] 	<= addr_count_data_ID_1[11][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[12][35:32] 	<= addr_count_data_ID_1[11][35:32] + 1'b1;
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				else if((addr_count_data_ID_1[11][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_1[0] 			<= 36'd0;
+					addr_count_data_ID_1[1] 			<= addr_count_data_ID_1[0];
+					addr_count_data_ID_1[2] 			<= addr_count_data_ID_1[1];
+					addr_count_data_ID_1[3] 			<= addr_count_data_ID_1[2];
+					addr_count_data_ID_1[4] 			<= addr_count_data_ID_1[3];
+					addr_count_data_ID_1[5] 			<= addr_count_data_ID_1[4];
+					addr_count_data_ID_1[6] 			<= addr_count_data_ID_1[5];
+					addr_count_data_ID_1[7] 			<= addr_count_data_ID_1[6];
+					addr_count_data_ID_1[8] 			<= addr_count_data_ID_1[7];
+					addr_count_data_ID_1[9] 			<= addr_count_data_ID_1[8];
+					addr_count_data_ID_1[10] 			<= addr_count_data_ID_1[9];
+					addr_count_data_ID_1[11] 			<= addr_count_data_ID_1[10];
+					addr_count_data_ID_1[12][15:0] 		<= addr_count_data_ID_1[11][15:0];								//SRAM_ID
+					addr_count_data_ID_1[12][31:16] 	<= addr_count_data_ID_1[11][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_1[12][35:32] 	<= addr_count_data_ID_1[11][35:32] + 1'b1;
+					{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				end
+				//SRAM_ID 2
+				//if SRAM_ID isn't the same in second Dffs
+				else if((addr_count_data_ID_2[10][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_2[0] 			<= 36'd0;
+						addr_count_data_ID_2[1] 			<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 			<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 			<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 			<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 			<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 			<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 			<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 			<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 			<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 			<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11][15:0] 		<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[11][31:16] 	<= addr_count_data_ID_2[10][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[11][35:32] 	<= addr_count_data_ID_2[10][35:32] + 1'b1;
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+					else
+					begin
+						addr_count_data_ID_2[0] 			<= 36'd0;
+						addr_count_data_ID_2[1] 			<= addr_count_data_ID_2[0];
+						addr_count_data_ID_2[2] 			<= addr_count_data_ID_2[1];
+						addr_count_data_ID_2[3] 			<= addr_count_data_ID_2[2];
+						addr_count_data_ID_2[4] 			<= addr_count_data_ID_2[3];
+						addr_count_data_ID_2[5] 			<= addr_count_data_ID_2[4];
+						addr_count_data_ID_2[6] 			<= addr_count_data_ID_2[5];
+						addr_count_data_ID_2[7] 			<= addr_count_data_ID_2[6];
+						addr_count_data_ID_2[8] 			<= addr_count_data_ID_2[7];
+						addr_count_data_ID_2[9] 			<= addr_count_data_ID_2[8];
+						addr_count_data_ID_2[10] 			<= addr_count_data_ID_2[9];
+						addr_count_data_ID_2[11][15:0] 		<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_2[11][31:16] 	<= addr_count_data_ID_2[10][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_2[11][35:32] 	<= addr_count_data_ID_2[10][35:32] + 1'b1;
+						addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+						{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+					end
+				end
+				else if((addr_count_data_ID_2[10][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 			<= 36'd0;
+					addr_count_data_ID_2[1] 			<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 			<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 			<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 			<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 			<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 			<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 			<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 			<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 			<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 			<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11][15:0] 		<= addr_count_data_ID_2[10][15:0];	//SRAM_ID
+					addr_count_data_ID_2[11][31:16] 	<= addr_count_data_ID_2[10][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[11][35:32] 	<= addr_count_data_ID_2[10][35:32] + 1'b1;
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				else if((addr_count_data_ID_2[10][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_2[0] 			<= 36'd0;
+					addr_count_data_ID_2[1] 			<= addr_count_data_ID_2[0];
+					addr_count_data_ID_2[2] 			<= addr_count_data_ID_2[1];
+					addr_count_data_ID_2[3] 			<= addr_count_data_ID_2[2];
+					addr_count_data_ID_2[4] 			<= addr_count_data_ID_2[3];
+					addr_count_data_ID_2[5] 			<= addr_count_data_ID_2[4];
+					addr_count_data_ID_2[6] 			<= addr_count_data_ID_2[5];
+					addr_count_data_ID_2[7] 			<= addr_count_data_ID_2[6];
+					addr_count_data_ID_2[8] 			<= addr_count_data_ID_2[7];
+					addr_count_data_ID_2[9] 			<= addr_count_data_ID_2[8];
+					addr_count_data_ID_2[10] 			<= addr_count_data_ID_2[9];
+					addr_count_data_ID_2[11][15:0] 		<= addr_count_data_ID_2[10][15:0];	//SRAM_ID
+					addr_count_data_ID_2[11][31:16] 	<= addr_count_data_ID_2[10][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_2[11][35:32] 	<= addr_count_data_ID_2[10][35:32] + 1'b1;
+					addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+					{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				end
+				//SRAM_ID 3
+				//if SRAM_ID isn't the same in third Dffs
+				else if((addr_count_data_ID_3[9][15:0]) == 16'd0)	//if SRAM_ID is empty in second DFFs													
+				begin
+					if(delay1_write_data_valid&&(state_init == READ))
+					begin
+						addr_count_data_ID_3[0] 			<= 36'd0;
+						addr_count_data_ID_3[1] 			<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 			<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 			<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 			<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 			<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 			<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 			<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 			<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 			<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10][15:0] 		<= delay1_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[10][31:16] 	<= addr_count_data_ID_3[9][31:16] + delay1_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[10][35:32] 	<= addr_count_data_ID_3[9][35:32] + 1'b1;
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+					else
+					begin
+						addr_count_data_ID_3[0] 			<= 36'd0;
+						addr_count_data_ID_3[1] 			<= addr_count_data_ID_3[0];
+						addr_count_data_ID_3[2] 			<= addr_count_data_ID_3[1];
+						addr_count_data_ID_3[3] 			<= addr_count_data_ID_3[2];
+						addr_count_data_ID_3[4] 			<= addr_count_data_ID_3[3];
+						addr_count_data_ID_3[5] 			<= addr_count_data_ID_3[4];
+						addr_count_data_ID_3[6] 			<= addr_count_data_ID_3[5];
+						addr_count_data_ID_3[7] 			<= addr_count_data_ID_3[6];
+						addr_count_data_ID_3[8] 			<= addr_count_data_ID_3[7];
+						addr_count_data_ID_3[9] 			<= addr_count_data_ID_3[8];
+						addr_count_data_ID_3[10][15:0] 		<= delay3_write_data[47:32];	//SRAM_ID
+						addr_count_data_ID_3[10][31:16] 	<= addr_count_data_ID_3[9][31:16] + delay3_write_data[63:48];	//byte_count
+						addr_count_data_ID_3[10][35:32] 	<= addr_count_data_ID_3[9][35:32] + 1'b1;
+						addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+						{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+					end
+				end
+				else if((addr_count_data_ID_3[9][15:0]) == delay1_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 			<= 36'd0;
+					addr_count_data_ID_3[1] 			<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 			<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 			<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 			<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 			<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 			<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 			<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 			<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 			<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10][15:0] 		<= addr_count_data_ID_3[9][15:0];								//SRAM_ID
+					addr_count_data_ID_3[10][31:16] 	<= addr_count_data_ID_3[9][31:16] + delay1_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[10][35:32] 	<= addr_count_data_ID_3[9][35:32] + 1'b1;
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+				else if((addr_count_data_ID_3[9][15:0]) == delay3_write_data[47:32])
+				begin
+					addr_count_data_ID_3[0] 			<= 36'd0;
+					addr_count_data_ID_3[1] 			<= addr_count_data_ID_3[0];	
+					addr_count_data_ID_3[2] 			<= addr_count_data_ID_3[1];
+					addr_count_data_ID_3[3] 			<= addr_count_data_ID_3[2];
+					addr_count_data_ID_3[4] 			<= addr_count_data_ID_3[3];
+					addr_count_data_ID_3[5] 			<= addr_count_data_ID_3[4];
+					addr_count_data_ID_3[6] 			<= addr_count_data_ID_3[5];
+					addr_count_data_ID_3[7] 			<= addr_count_data_ID_3[6];
+					addr_count_data_ID_3[8] 			<= addr_count_data_ID_3[7];
+					addr_count_data_ID_3[9] 			<= addr_count_data_ID_3[8];
+					addr_count_data_ID_3[10][15:0] 		<= addr_count_data_ID_3[9][15:0];								//SRAM_ID
+					addr_count_data_ID_3[10][31:16] 	<= addr_count_data_ID_3[9][31:16] + delay3_write_data[63:48];	//byte_count
+					addr_count_data_ID_3[10][35:32] 	<= addr_count_data_ID_3[9][35:32] + 1'b1;
+					addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+					{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+				end
+			end
+			else
+			begin
+				addr_count_data[0] 		<= 55'd0;
+				addr_count_data[1] 		<= addr_count_data[0];
+				addr_count_data[2] 		<= addr_count_data[1];
+				addr_count_data[3] 		<= addr_count_data[2];
+				addr_count_data[4] 		<= addr_count_data[3];
+				addr_count_data[5] 		<= addr_count_data[4];
+				addr_count_data[6] 		<= addr_count_data[5];
+				addr_count_data[7] 		<= addr_count_data[6];
+				addr_count_data[8] 		<= addr_count_data[7];
+				addr_count_data[9] 		<= addr_count_data[8];
+				addr_count_data[10] 		<= addr_count_data[9];
+				addr_count_data[11] 		<= addr_count_data[10];
+				addr_count_data[12] 		<= addr_count_data[11];
+				addr_count_data[13] 		<= addr_count_data[12];
+				{packet_count_ID_0 , rmw_addr , byte_count_ID_0 , SRAM_ID_0} 	<= addr_count_data[13];
+				data_bit_array 			<= data_bit_array << 1; 
+				addr_count_data_ID_1[0] 	<= 36'd0;
+				addr_count_data_ID_1[1] 	<= addr_count_data_ID_1[0];
+				addr_count_data_ID_1[2] 	<= addr_count_data_ID_1[1];
+				addr_count_data_ID_1[3] 	<= addr_count_data_ID_1[2];
+				addr_count_data_ID_1[4] 	<= addr_count_data_ID_1[3];
+				addr_count_data_ID_1[5] 	<= addr_count_data_ID_1[4];
+				addr_count_data_ID_1[6] 	<= addr_count_data_ID_1[5];
+				addr_count_data_ID_1[7] 	<= addr_count_data_ID_1[6];
+				addr_count_data_ID_1[8] 	<= addr_count_data_ID_1[7];
+				addr_count_data_ID_1[9] 	<= addr_count_data_ID_1[8];
+				addr_count_data_ID_1[10] 	<= addr_count_data_ID_1[9];
+				addr_count_data_ID_1[11] 	<= addr_count_data_ID_1[10];
+				addr_count_data_ID_1[12] 	<= addr_count_data_ID_1[11];
+				{packet_count_ID_1 , byte_count_ID_1 , SRAM_ID_1}  		<= addr_count_data_ID_1[12];
+				addr_count_data_ID_2[0] 	<= 36'd0;
+				addr_count_data_ID_2[1] 	<= addr_count_data_ID_2[0];
+				addr_count_data_ID_2[2] 	<= addr_count_data_ID_2[1];
+				addr_count_data_ID_2[3] 	<= addr_count_data_ID_2[2];
+				addr_count_data_ID_2[4] 	<= addr_count_data_ID_2[3];
+				addr_count_data_ID_2[5] 	<= addr_count_data_ID_2[4];
+				addr_count_data_ID_2[6] 	<= addr_count_data_ID_2[5];
+				addr_count_data_ID_2[7] 	<= addr_count_data_ID_2[6];
+				addr_count_data_ID_2[8] 	<= addr_count_data_ID_2[7];
+				addr_count_data_ID_2[9] 	<= addr_count_data_ID_2[8];
+				addr_count_data_ID_2[10] 	<= addr_count_data_ID_2[9];
+				addr_count_data_ID_2[11] 	<= addr_count_data_ID_2[10];
+				addr_count_data_ID_2[12] 	<= addr_count_data_ID_2[11];
+				{packet_count_ID_2 , byte_count_ID_2 , SRAM_ID_2}  		<= addr_count_data_ID_2[12];
+				addr_count_data_ID_3[0] 	<= 36'd0;
+				addr_count_data_ID_3[1] 	<= addr_count_data_ID_3[0];
+				addr_count_data_ID_3[2] 	<= addr_count_data_ID_3[1];
+				addr_count_data_ID_3[3] 	<= addr_count_data_ID_3[2];
+				addr_count_data_ID_3[4] 	<= addr_count_data_ID_3[3];
+				addr_count_data_ID_3[5] 	<= addr_count_data_ID_3[4];
+				addr_count_data_ID_3[6] 	<= addr_count_data_ID_3[5];
+				addr_count_data_ID_3[7] 	<= addr_count_data_ID_3[6];
+				addr_count_data_ID_3[8] 	<= addr_count_data_ID_3[7];
+				addr_count_data_ID_3[9] 	<= addr_count_data_ID_3[8];
+				addr_count_data_ID_3[10] 	<= addr_count_data_ID_3[9];
+				addr_count_data_ID_3[11] 	<= addr_count_data_ID_3[10];
+				{packet_count_ID_3 , byte_count_ID_3 , SRAM_ID_3}  		<= addr_count_data_ID_3[11];
+			end
+		end
+	end
+	//////////////////////////////////////////////////////////////////////////////////////
 endmodule
 

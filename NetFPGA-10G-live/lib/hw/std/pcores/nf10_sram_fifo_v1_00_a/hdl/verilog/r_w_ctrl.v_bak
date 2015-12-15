@@ -1,0 +1,875 @@
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date:    15:59:58 09/29/2015 
+// Design Name: 
+// Module Name:    r_w_ctrl 
+// Project Name: 
+// Target Devices: 
+// Tool versions: 
+// Description: 
+//
+// Dependencies: 
+//
+// Revision: 
+// Revision 0.01 - File Created
+// Additional Comments: 
+//
+//////////////////////////////////////////////////////////////////////////////////
+module r_w_ctrl
+#(
+	///////////////////////////////////////////////////////////////////////////////
+	// Parameter Definitions
+	///////////////////////////////////////////////////////////////////////////////
+	// Width of AXI data bus in bytes
+	parameter integer TDATA_WIDTH        = 24,
+	parameter integer TUSER_WIDTH        = 128,
+	parameter integer NUM_QUEUES         = 4,
+	parameter integer QUEUE_ID_WIDTH     = 2,
+	parameter integer NUM_MEM_INPUTS     = 6,
+	parameter integer NUM_MEM_CHIPS      = 3,
+	parameter integer MEM_WIDTH          = 36,
+	parameter integer MEM_ADDR_WIDTH     = 19,
+	parameter integer MEM_NUM_WORDS      = 524288,
+	parameter integer QUEUE_SIZE         = MEM_NUM_WORDS/4
+)
+(
+	input                          					clk,
+	input                          					reset,
+	
+	output reg [(QUEUE_ID_WIDTH-1):0]  				read_data_queue_id,
+    output reg [((8*TDATA_WIDTH+9)-1):0]  			read_data,
+   	output                         					read_data_valid,
+    output reg 			  							read_empty,
+    output reg                     					read_burst_state,
+	
+	input 		[((8*TDATA_WIDTH+9)-1):0]  			write_data,
+	input 		[31:0]  							write_data_addr,
+	input                          					write_data_valid,
+	output reg 			  							write_full,
+	output reg                     					next_write_burst_state,
+
+	input                          					sram_read_full,
+	input                          					sram_write_full,
+	output reg 	[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 	dout,
+	output reg 	[(MEM_ADDR_WIDTH-1):0]  			dout_addr,
+	output reg                         				dout_burst_ready,
+	input  		[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 	din,
+	input  		[(NUM_MEM_CHIPS-1):0]            	din_valid,
+	input  		[(NUM_MEM_CHIPS-1):0]            	pre_din_valid,
+	output reg 	[(MEM_ADDR_WIDTH-1):0]  			din_addr,
+	output reg                         				din_ready,
+	input											cal_done
+);
+	reg			[2:0]	state_init , nextstate_init;
+	parameter IDLE = 0 , INIT = 1 , INIT_READ = 2 , READ_WRITE_WAIT = 3 , READ = 4 , WRITE = 5 , INIT_READ_1 = 6;
+	reg 		[(MEM_WIDTH*NUM_MEM_INPUTS-1):0] 	next_dout_data;
+	reg 		[(MEM_ADDR_WIDTH-1):0]  			next_dout_addr;
+	reg                         					next_dout_burst_ready;
+	reg 		[(MEM_ADDR_WIDTH-1):0]  			next_din_addr;
+	reg                         					next_din_ready;
+	reg			[11:0]								reg_rmw_addr;
+	reg		[18:0]								rmw_addr;
+	reg			[31:0]								count_data;
+	wire											delay_addr_valid , count_delay_valid;
+	reg												pre_count_data_num , count_data_num;
+	reg												pre_mod_finish , mod_finish;
+	reg												data_r_en , write_data_rn;
+	reg												delay_read;
+
+	///////////////////////////////////////////////////////////////////////////////	
+	//for initial data read
+	//only for test 
+	reg	[18:0]	test;
+	always@(posedge clk)
+	begin
+		if(reset)
+		begin
+			test <= 1'b0;
+		end
+		else if((test == 19'd6000) && (state_init == INIT_READ))
+		begin
+			test <= test;
+		end
+		else if((test == 19'd7000) && (state_init == INIT_READ_1))
+		begin
+			test <= test;
+		end
+		else
+		begin
+			test <= test + 1'b1;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////	
+	//for counting the data finish
+	reg	count_data_rn;
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			count_data_rn <= 1'b0;
+		end
+		else if(pre_din_valid)
+		begin
+			count_data_rn <= count_data_rn + 1'b1;
+		end
+		else
+		begin
+			count_data_rn <= 1'b0;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////	
+	//din data delay to wait for the address and data	
+	reg	[(MEM_WIDTH*NUM_MEM_INPUTS-1):0]	delay_din , delay_1_din;
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			delay_din <= 216'b0;
+			delay_1_din <= 216'b0;
+		end
+		else
+		begin
+			delay_din <= din;
+			delay_1_din <= delay_din;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////	
+	//delay two clock cycle while need to read but in write state	
+	reg 		[((8*TDATA_WIDTH+9)-1):0]  	delay1_write_data;
+	reg 		[31:0]  					delay1_write_data_addr;
+	reg                          			delay1_write_data_valid;
+	reg 		[((8*TDATA_WIDTH+9)-1):0]  	delay2_write_data;
+	reg 		[31:0]  					delay2_write_data_addr;
+	reg                          			delay2_write_data_valid;
+	reg 		[31:0]  					delay3_write_data_addr;
+	reg                          			delay3_write_data_valid;
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			delay1_write_data <= 201'd0;
+			delay1_write_data_addr <= 32'd0;		
+			delay1_write_data_valid <= 1'b0;
+			delay2_write_data <= 201'd0;
+			delay2_write_data_addr <= 32'd0;		
+			delay2_write_data_valid <= 1'b0;
+		end
+		else
+		begin
+			delay1_write_data <= write_data;
+			delay1_write_data_addr <= write_data_addr;		
+			delay1_write_data_valid <= write_data_valid;
+			delay2_write_data <= delay1_write_data;
+			delay2_write_data_addr <= delay1_write_data_addr;		
+			delay2_write_data_valid <= delay1_write_data_valid;
+			delay3_write_data_addr <= delay2_write_data_addr;		
+			delay3_write_data_valid <= delay2_write_data_valid;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////	
+	//din data delay --> wait for the state change	
+	reg	[7:0]	vaild_count;
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			vaild_count <= 8'd0;
+		end
+		else if(write_data_valid)
+		begin
+			vaild_count <= vaild_count + 1;
+		end
+		else if(dout_burst_ready)// || (write_data_valid || delay1_write_data_valid)
+		begin
+			if(vaild_count == 8'd0)
+			begin
+				vaild_count <= 8'd0;
+			end
+			else
+			begin
+				vaild_count <= vaild_count - 1;
+			end	
+		end
+		else
+		begin
+			vaild_count <= vaild_count;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////
+	reg	[(MEM_ADDR_WIDTH-1):0]	delay_data_addr;
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			delay_data_addr <= 19'd0;
+		end
+		else
+		begin
+			delay_data_addr <= write_data_addr;
+		end
+	end
+	///////////////////////////////////////////////////////////////////////////////
+
+	//FSM for initialization
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			state_init <= IDLE;
+		end
+		else
+		begin
+			state_init <= nextstate_init;
+		end
+	end
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			dout <= 216'd0;
+			dout_addr <= 19'd0;
+			dout_burst_ready <= 1'b0;
+			din_addr <= 19'd0;
+			din_ready <= 1'b0;
+			pre_count_data_num <= 1'b0;
+			pre_mod_finish <= 1'b0;
+		end
+		else
+		begin
+			dout <= next_dout_data;
+			dout_addr <= next_dout_addr;
+			dout_burst_ready <= next_dout_burst_ready;
+			din_addr <= next_din_addr;
+			din_ready <= next_din_ready;
+			pre_count_data_num <= count_data_num;
+			pre_mod_finish <= mod_finish;
+		end
+	end
+	always@(*)
+	begin
+		next_dout_burst_ready = 1'b0;
+		next_dout_data = 216'd0;
+		next_dout_addr = 19'd0;
+		next_din_ready = 1'b0;
+		next_din_addr = 19'd0;
+		count_data_num = 1'b0;
+		mod_finish = 1'b0;
+		write_data_rn = 1'b0;
+		delay_read = 1'b0;
+		case(state_init)
+			IDLE : 
+			begin
+				if(cal_done)								//go to initializtion after cal_done rise
+				begin
+					next_dout_burst_ready = 1'b0;
+					next_dout_data = 216'd0;
+					next_dout_addr = 19'd0;
+					nextstate_init = INIT;
+				end
+				else
+				begin
+					next_dout_burst_ready = 1'b0;
+					next_dout_data = 216'd0;
+					next_dout_addr = 19'd0;
+					nextstate_init = IDLE;
+				end
+			end
+			INIT : 											//reset the memory to all zero
+			begin
+				if(dout_addr == 11'b111_1111_1111)//19'b111_1111_1111_1111_1111
+				begin
+					next_dout_burst_ready = 1'b0;
+					next_dout_data = 216'd0;
+					nextstate_init = INIT_READ;//READ_WRITE_WAIT
+					next_dout_addr = 19'd0;
+				end
+				else
+				begin
+					next_dout_burst_ready = 1'b1;
+					//next_dout_data = dout_addr + 1'b1;
+					next_dout_data = 216'd0;
+					next_dout_addr = dout_addr + 1'b1;
+					nextstate_init = INIT;
+				end
+			end
+			INIT_READ : 									//ensure the memory are all zero --> read from all memory location
+			begin
+				if(din_addr == 11'd16)
+				begin
+					next_din_ready = 1'b0;
+					next_din_addr = 19'd0;
+					nextstate_init = INIT_READ_1;
+				end
+				else if(test == 19'd6000)
+				begin
+					next_din_ready = 1'b1;
+					next_din_addr = din_addr + 1'b1;
+					nextstate_init = INIT_READ;
+				end
+				else
+				begin
+					next_din_ready = 1'b0;
+					next_din_addr = 19'd0;
+					nextstate_init = INIT_READ;
+				end
+			end
+			INIT_READ_1 : 									//ensure the memory are all zero --> read from all memory location
+			begin
+				if(din_addr == 11'b111_1111_1111)
+				begin
+					next_din_ready = 1'b0;
+					next_din_addr = 19'd0;
+					nextstate_init = READ_WRITE_WAIT;
+				end
+				else if(test == 19'd7000)
+				begin
+					next_din_ready = 1'b1;
+					next_din_addr = din_addr + 1'b1;
+					nextstate_init = INIT_READ_1;
+				end
+				else
+				begin
+					next_din_ready = 1'b0;
+					next_din_addr = 19'd0;
+					nextstate_init = INIT_READ_1;
+				end
+			end
+			READ_WRITE_WAIT : 								//stay at this state after initialization
+			begin
+				next_dout_burst_ready = 1'b0;
+				next_dout_data = 216'd0;
+				next_dout_addr = 19'd0;
+				next_din_ready = 1'b0;
+				next_din_addr = 19'd0;
+				if(din_valid && (vaild_count != 8'd0))
+				begin
+					nextstate_init = WRITE;
+				end
+				else if(write_data_valid)
+				begin
+					nextstate_init = READ;
+				end
+				else
+				begin
+					nextstate_init = READ_WRITE_WAIT;
+				end
+			end
+			READ : 
+			begin
+				next_din_ready = 1'b1;		
+				if(delay3_write_data_valid)
+				begin
+					next_din_addr = {7'd0 , delay3_write_data_addr[10:0]};
+				end
+				else
+				begin
+					next_din_addr = {7'd0 , delay_data_addr[10:0]};
+				end
+				if(din_valid && (vaild_count != 8'd0))
+				begin
+					nextstate_init = WRITE;
+				end
+				else
+				begin
+					nextstate_init = READ_WRITE_WAIT;
+				end
+			end
+			WRITE : 
+			begin
+				count_data_num = pre_count_data_num + 1;
+				//compare
+				if(~pre_count_data_num)			//first data
+				begin
+					next_dout_burst_ready = 1'b1;
+					next_dout_addr = {7'd0 , rmw_addr[10:0]};
+					if(delay_din[215:200] == 16'd0)
+					begin	
+						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (write_data_valid || delay1_write_data_valid))
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd2;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = count_data[31:16] + write_data[63:48];	//byte count
+							write_data_rn = 1'b1;							
+						end
+						else
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd1;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = {44'd0 , count_data[31:16]};		//byte count							
+						end
+						next_dout_data[179:144] = 36'd0;
+						next_dout_data[107:72] = 36'd0;
+						next_dout_data[35:0] = 36'd0;
+						mod_finish = 1;
+					end
+					else if(delay_din[215:200] == count_data[15:0])
+					begin	
+						if((write_data[47:32] == delay_din[215:200] || delay1_write_data[47:32] == delay_din[215:200]) && (write_data_valid || delay1_write_data_valid))
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16] + write_data[63:48];
+							write_data_rn = 1'b1;
+						end
+						else
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 1'b1;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16];
+						end	
+						next_dout_data[179:144] = delay_din[179:144];
+						next_dout_data[107:72] = delay_din[107:72];
+						next_dout_data[35:0] = delay_din[35:0];
+						mod_finish = 1;
+					end
+					else if(delay_din[179:164] == 16'd0)
+					begin
+						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (write_data_valid || delay1_write_data_valid))
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd2;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = count_data[31:16] + write_data[63:48];	//byte count	
+							write_data_rn = 1'b1;						
+						end
+						else
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd1;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = {44'd0 , count_data[31:16]};	//byte count							
+						end
+						next_dout_data[215:180] = delay_din[215:180];
+						next_dout_data[143:108] = delay_din[143:108];
+						next_dout_data[71:36] = delay_din[71:36];
+						mod_finish = 1;
+					end
+					else if(delay_din[179:164] == count_data[15:0])
+					begin	
+						if((write_data[47:32] == delay_din[179:164] || delay1_write_data[47:32] == delay_din[179:164]) && (write_data_valid || delay1_write_data_valid))
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 2'd2;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16] + write_data[63:48];
+							write_data_rn = 1'b1;
+						end
+						else
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 1'b1;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16];							
+						end
+						next_dout_data[215:180] = delay_din[215:180];
+						next_dout_data[143:108] = delay_din[143:108];
+						next_dout_data[71:36] = delay_din[71:36];
+						mod_finish = 1;
+					end
+					else
+					begin
+						next_dout_data = delay_din;
+						mod_finish = 0;
+					end
+
+				end
+				else					//second data
+				begin
+					if(delay_din[215:200] == 16'd0 && (~pre_mod_finish))
+					begin	
+						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (delay1_write_data_valid || delay2_write_data_valid))
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd2;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = count_data[31:16] + write_data[63:48];	//byte count	
+							write_data_rn = 1'b1;						
+						end
+						else
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = 32'd1;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = {44'd0 , count_data[31:16]};		//byte count							
+						end
+						next_dout_data[179:144] = 36'd0;
+						next_dout_data[107:72] = 36'd0;
+						next_dout_data[35:0] = 36'd0;
+					end
+					else if(delay_din[215:200] == count_data[15:0] && (~pre_mod_finish))
+					begin	
+						if((write_data[47:32] == delay_din[215:200] || delay1_write_data[47:32] == delay_din[215:200]) && (delay1_write_data_valid || delay2_write_data_valid))
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 2'd2;;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16] + write_data[63:48];
+							write_data_rn = 1'b1;
+						end
+						else
+						begin
+							next_dout_data[215:200] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[199:180] , next_dout_data[143:132]} = {next_dout_data[199:180] , next_dout_data[143:132]} + 1'b1;	//packet count
+							{next_dout_data[131:108] , next_dout_data[71:36]} = {next_dout_data[131:108] , next_dout_data[71:36]} + count_data[31:16];
+						end	
+						next_dout_data[179:144] = delay_din[179:144];
+						next_dout_data[107:72] = delay_din[107:72];
+						next_dout_data[35:0] = delay_din[35:0];	
+					end
+					else if(delay_din[179:164] == 16'd0 && (~pre_mod_finish))
+					begin
+						if((write_data[47:32] == count_data[15:0] || delay1_write_data[47:32] == count_data[15:0]) && (delay1_write_data_valid || delay2_write_data_valid))
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd2;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = count_data[31:16] + write_data[63:48];	//byte count	
+							write_data_rn = 1'b1;						
+						end
+						else
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = 32'd1;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = {44'd0 , count_data[31:16]};	//byte count							
+						end
+						next_dout_data[215:180] = delay_din[215:180];
+						next_dout_data[143:108] = delay_din[143:108];
+						next_dout_data[71:36] = delay_din[71:36];
+					end
+					else if(delay_din[179:164] == count_data[15:0] && (~pre_mod_finish))
+					begin		
+						if((write_data[47:32] == delay_din[179:164] || delay1_write_data[47:32] == delay_din[179:164]) && (delay1_write_data_valid || delay2_write_data_valid))
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 2'd2;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16] + write_data[63:48];
+							write_data_rn = 1'b1;
+						end
+						else
+						begin
+							next_dout_data[179:164] = count_data[15:0];		//SRAM_ID
+							{next_dout_data[163:144] , next_dout_data[107:96]} = {next_dout_data[163:144] , next_dout_data[107:96]} + 1'b1;	//packet count
+							{next_dout_data[85:72] , next_dout_data[35:0]} = {next_dout_data[85:72] , next_dout_data[35:0]} + count_data[31:16];							
+						end
+						next_dout_data[215:180] = delay_din[215:180];
+						next_dout_data[143:108] = delay_din[143:108];
+						next_dout_data[71:36] = delay_din[71:36];
+					end
+					else if(delay2_write_data_valid|delay1_write_data_valid)
+					begin
+						delay_read = 1'b1;
+					end
+					else
+					begin
+						next_dout_data = delay_din;
+					end
+					mod_finish = 0;
+					if(write_data_valid|delay_read)
+					begin
+						nextstate_init = READ;
+					end
+					else
+					begin
+						nextstate_init = READ_WRITE_WAIT;
+					end
+				end
+			end
+			default : 
+			begin
+				next_dout_burst_ready = 1'b0;
+				next_dout_data = 216'd0;
+				next_dout_addr = 19'd0;
+				next_din_ready = 1'b0;
+				next_din_addr = 19'd0;
+			end
+		endcase
+	end		
+	//////////////////////////////////////////////////////////////////////////////////////
+	/*fifo_addr_delay 
+	/*fifo_addr_delay 
+	(
+		.clk(clk), 				// input clk
+	  	.rst(reset), 				// input rst
+		.din(write_data_addr[18:0]), 		// input [18 : 0] din
+	  	.wr_en(write_data_valid), 		// input wr_en
+	  	.rd_en(count_data_rn|write_data_rn), 	// input rd_en
+	  	.dout(rmw_addr),			// output [18 : 0] dout
+	  	.full(), 				// output full
+	  	.empty(), 				// output empty
+	  	.valid(delay_addr_valid) 		// output valid
+	);
+	
+	count_delay 
+	count_delay 
+	(
+  		.clk(clk), 				// input clk
+  		.rst(reset), 				// input rst
+  		.din(write_data[63:32]), 		// input [31 : 0] din
+  		.wr_en(write_data_valid), 		// input wr_en
+  		.rd_en(count_data_rn|write_data_rn), 	// input rd_en
+  		.dout(count_data), 			// output [31 : 0] dout
+  		.full(), 				// output full
+  		.empty() ,				// output empty
+		.valid(count_delay_valid) 		// output valid
+	);*/
+	//////////////////////////////////////////////////////////////////////////////////////
+	//use shift register to save the data
+	reg		[49:0]	addr_count_data			[13:0];
+	reg		[3:0]	addr_count_data_counter	[8:0];
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			addr_count_data[0] 	<= 50'd0;
+			addr_count_data[1] 	<= 50'd0;
+			addr_count_data[2] 	<= 50'd0;
+			addr_count_data[3] 	<= 50'd0;
+			addr_count_data[4] 	<= 50'd0;
+			addr_count_data[5] 	<= 50'd0;
+			addr_count_data[6] 	<= 50'd0;
+			addr_count_data[7] 	<= 50'd0;
+			addr_count_data[8] 	<= 50'd0;
+			addr_count_data[9] 	<= 50'd0;
+			addr_count_data[10] <= 50'd0;
+			addr_count_data[11] <= 50'd0;
+			addr_count_data[12] <= 50'd0;
+			addr_count_data[13] <= 50'd0;
+			count_data 			<= 32'd0;
+			rmw_addr 			<= 19'd0;
+		end
+		else
+		begin
+			if(din_ready)
+			begin
+				addr_count_data[0] <= {delay2_write_data_addr , delay2_write_data[63:32]};
+				addr_count_data[1] <= addr_count_data[0];
+				addr_count_data[2] <= addr_count_data[1];
+				addr_count_data[3] <= addr_count_data[2];
+				addr_count_data[4] <= addr_count_data[3];
+				addr_count_data[5] <= addr_count_data[4];
+				addr_count_data[6] <= addr_count_data[5];
+				addr_count_data[7] <= addr_count_data[6];
+				addr_count_data[8] <= addr_count_data[7];
+				addr_count_data[9] <= addr_count_data[8];
+				addr_count_data[10] <= addr_count_data[9];
+				addr_count_data[11] <= addr_count_data[10];
+				addr_count_data[12] <= addr_count_data[11];
+				addr_count_data[13] <= addr_count_data[12];
+				{rmw_addr , count_data} <= addr_count_data[13];
+			end
+			else
+			begin
+				addr_count_data[0] <= 50'd0;
+				addr_count_data[1] <= addr_count_data[0];
+				addr_count_data[2] <= addr_count_data[1];
+				addr_count_data[3] <= addr_count_data[2];
+				addr_count_data[4] <= addr_count_data[3];
+				addr_count_data[5] <= addr_count_data[4];
+				addr_count_data[6] <= addr_count_data[5];
+				addr_count_data[7] <= addr_count_data[6];
+				addr_count_data[8] <= addr_count_data[7];
+				addr_count_data[9] <= addr_count_data[8];
+				addr_count_data[10] <= addr_count_data[9];
+				addr_count_data[11] <= addr_count_data[10];
+				addr_count_data[12] <= addr_count_data[11];
+				addr_count_data[13] <= addr_count_data[12];
+				{rmw_addr , count_data} <= addr_count_data[13];
+			end
+		end
+	end
+	always@(posedge clk or negedge reset)
+	begin
+		if(reset)
+		begin
+			addr_count_data_counter[0] <= 4'd0;
+			addr_count_data_counter[1] <= 4'd0;
+			addr_count_data_counter[2] <= 4'd0;
+			addr_count_data_counter[3] <= 4'd0;
+			addr_count_data_counter[4] <= 4'd0;
+			addr_count_data_counter[5] <= 4'd0;
+			addr_count_data_counter[6] <= 4'd0;
+			addr_count_data_counter[7] <= 4'd0;
+			addr_count_data_counter[8] <= 4'd0;
+		end
+		else
+		begin
+			if(din_ready)	//when the read addr send --> counter start counting
+			begin
+				if(addr_count_data_counter[0] == 4'd0)
+				begin
+					addr_count_data_counter[0] <= addr_count_data_counter[0] + 1'b1;
+				end
+				else if(addr_count_data_counter[1] == 4'd0)
+				begin
+					addr_count_data_counter[1] <= addr_count_data_counter[1] + 1'b1;
+				end
+				else if(addr_count_data_counter[2] == 4'd0)
+				begin
+					addr_count_data_counter[2] <= addr_count_data_counter[2] + 1'b1;
+				end
+				else if(addr_count_data_counter[3] == 4'd0)
+				begin
+					addr_count_data_counter[3] <= addr_count_data_counter[3] + 1'b1;
+				end
+				else if(addr_count_data_counter[4] == 4'd0)
+				begin
+					addr_count_data_counter[4] <= addr_count_data_counter[4] + 1'b1;
+				end
+				else if(addr_count_data_counter[5] == 4'd0)
+				begin
+					addr_count_data_counter[5] <= addr_count_data_counter[5] + 1'b1;
+				end
+				else if(addr_count_data_counter[6] == 4'd0)
+				begin
+					addr_count_data_counter[6] <= addr_count_data_counter[6] + 1'b1;
+				end
+				else if(addr_count_data_counter[7] == 4'd0)
+				begin
+					addr_count_data_counter[7] <= addr_count_data_counter[7] + 1'b1;
+				end
+				else if(addr_count_data_counter[8] == 4'd0)
+				begin
+					addr_count_data_counter[8] <= addr_count_data_counter[8] + 1'b1;
+				end
+				else
+				begin
+					addr_count_data_counter[0] <= 4'd0;
+					addr_count_data_counter[1] <= 4'd0;
+					addr_count_data_counter[2] <= 4'd0;
+					addr_count_data_counter[3] <= 4'd0;
+					addr_count_data_counter[4] <= 4'd0;
+					addr_count_data_counter[5] <= 4'd0;
+					addr_count_data_counter[6] <= 4'd0;
+					addr_count_data_counter[7] <= 4'd0;
+					addr_count_data_counter[8] <= 4'd0;
+				end
+			end
+			else
+			begin
+				if(din_valid)	//when the saved data has been used --> counter return to 0
+				begin
+					if(addr_count_data_counter[0] != 4'd0)
+					begin
+						addr_count_data_counter[0] <= 4'd0;
+					end
+					else if(addr_count_data_counter[1] != 4'd0)
+					begin
+						addr_count_data_counter[1] <= 4'd0;
+					end
+					else if(addr_count_data_counter[2] != 4'd0)
+					begin
+						addr_count_data_counter[2] <= 4'd0;
+					end
+					else if(addr_count_data_counter[3] != 4'd0)
+					begin
+						addr_count_data_counter[3] <= 4'd0;
+					end
+					else if(addr_count_data_counter[4] != 4'd0)
+					begin
+						addr_count_data_counter[4] <= 4'd0;
+					end
+					else if(addr_count_data_counter[5] != 4'd0)
+					begin
+						addr_count_data_counter[5] <= 4'd0;
+					end
+					else if(addr_count_data_counter[6] != 4'd0)
+					begin
+						addr_count_data_counter[6] <= 4'd0;
+					end
+					else if(addr_count_data_counter[7] != 4'd0)
+					begin
+						addr_count_data_counter[7] <= 4'd0;
+					end
+					else if(addr_count_data_counter[8] != 4'd0)
+					begin
+						addr_count_data_counter[8] <= 4'd0;
+					end
+					else
+					begin
+						addr_count_data_counter[0] <= 4'd0;
+						addr_count_data_counter[1] <= 4'd0;
+						addr_count_data_counter[2] <= 4'd0;
+						addr_count_data_counter[3] <= 4'd0;
+						addr_count_data_counter[4] <= 4'd0;
+						addr_count_data_counter[5] <= 4'd0;
+						addr_count_data_counter[6] <= 4'd0;
+						addr_count_data_counter[7] <= 4'd0;
+						addr_count_data_counter[8] <= 4'd0;
+					end
+				end
+				else//count clock for the data that saved
+				begin
+					if(addr_count_data_counter[0] != 4'd0)
+					begin
+						addr_count_data_counter[0] <= addr_count_data_counter[0] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[0] = 4'd0;
+					end
+					if(addr_count_data_counter[1] != 4'd0)
+					begin
+						addr_count_data_counter[1] <= addr_count_data_counter[1] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[1] = 4'd0;
+					end
+					if(addr_count_data_counter[2] != 4'd0)
+					begin
+						addr_count_data_counter[2] <= addr_count_data_counter[2] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[2] = 4'd0;
+					end
+					if(addr_count_data_counter[3] != 4'd0)
+					begin
+						addr_count_data_counter[3] <= addr_count_data_counter[3] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[3] = 4'd0;
+					end
+					if(addr_count_data_counter[4] != 4'd0)
+					begin
+						addr_count_data_counter[4] <= addr_count_data_counter[4] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[4] = 4'd0;
+					end
+					if(addr_count_data_counter[5] != 4'd0)
+					begin
+						addr_count_data_counter[5] <= addr_count_data_counter[5] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[5] = 4'd0;
+					end
+					if(addr_count_data_counter[6] != 4'd0)
+					begin
+						addr_count_data_counter[6] <= addr_count_data_counter[6] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[6] = 4'd0;
+					end
+					if(addr_count_data_counter[7] != 4'd0)
+					begin
+						addr_count_data_counter[7] <= addr_count_data_counter[7] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[7] = 4'd0;
+					end
+					if(addr_count_data_counter[8] != 4'd0)
+					begin
+						addr_count_data_counter[8] <= addr_count_data_counter[8] + 1'b1;
+					end
+					else
+					begin
+						addr_count_data_counter[8] = 4'd0;
+					end
+				end
+			end
+		end
+	end
+	//////////////////////////////////////////////////////////////////////////////////////
+endmodule
+
