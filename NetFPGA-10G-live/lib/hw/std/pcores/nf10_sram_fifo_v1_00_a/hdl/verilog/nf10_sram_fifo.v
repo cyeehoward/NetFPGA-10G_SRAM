@@ -371,7 +371,7 @@ module nf10_sram_fifo
                     .MEM_ADDR_WIDTH(MEM_ADDR_WIDTH)) 
                   r_w_ctrl(
                           .clk(memclk),
-                          .reset(memreset),
+                          .reset(~memreset),
                           //.read_queue_id(mem_queue_id_read),
                           .read_data_queue_id(mem_din_queue_id),
                           //.read_data_ready(winc_out),

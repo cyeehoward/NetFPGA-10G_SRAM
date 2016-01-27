@@ -161,7 +161,6 @@ module qdrii_top #
    output                    dbg_data_valid
    );
 ///////////////////////////////////////////////////////////////
-   wire	user_qr_valid;
    always@(posedge clk0)
    begin
 	if(user_rst_0)
