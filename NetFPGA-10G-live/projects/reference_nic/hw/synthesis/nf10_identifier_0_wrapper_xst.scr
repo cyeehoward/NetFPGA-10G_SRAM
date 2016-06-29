@@ -1,0 +1,13 @@
+run
+-opt_mode speed
+-netlist_hierarchy as_optimized
+-opt_level 1
+-p xc5vtx240tff1759-2
+-top nf10_identifier_0_wrapper
+-ifmt MIXED
+-ifn nf10_identifier_0_wrapper_xst.prj
+-ofn ../implementation/nf10_identifier_0_wrapper.ngc
+-hierarchy_separator /
+-iobuf NO
+-sd {../implementation}
+-vlgincdir {"/root/NetFPGA-10G-live/projects/reference_nic/hw/pcores/" "/root/NetFPGA-10G-live/lib/hw/contrib/pcores/" "/root/NetFPGA-10G-live/lib/hw/std/pcores/" "/root/NetFPGA-10G-live/lib/hw/xilinx/pcores/" "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxBFMinterface/pcores/" "/opt/Xilinx/13.4/ISE_DS/EDK/hw/XilinxProcessorIPLib/pcores/" }
